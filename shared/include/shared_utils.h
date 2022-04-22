@@ -88,7 +88,7 @@ static inline void log_inst(inst_t *insts, inst_t *inst)
 {
     int c = (((int)inst) - ((int)insts)) / sizeof(inst_t);
     log_info(logger, "inst %04d: code(%d) %-10s arg0 %d arg1 %d",
-             c, inst->code, inst_code_str(inst->code), insts->args[0], inst->args[1]);
+             c, inst->code, inst_code_str(inst->code), inst->args[0], inst->args[1]);
 }
 static inline void log_insts(inst_t *insts, u32 count)
 {

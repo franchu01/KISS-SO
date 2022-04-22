@@ -43,9 +43,7 @@ void prueba_parseo()
     asserts_prueba_parseo(insts, count);
 
     char *without_final_newline = strdup(archivo_test);
-    puts(without_final_newline);
     without_final_newline[strlen(without_final_newline) - 1] = '\0';
-    puts(without_final_newline);
     insts = parse_codigo(without_final_newline, strlen(without_final_newline), &count);
     free(without_final_newline);
 
