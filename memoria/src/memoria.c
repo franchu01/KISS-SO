@@ -21,27 +21,36 @@ struct page2_table_entry
     u32 frame_number;
 };
 
-struct page1_table_entry
+typedef struct page1_table_entry
 {
     u32 page2_page_number;
-};
-struct page_table_entry
+} page1_table_entry;
+typedef struct page_table_entry
 {
     // Presente si != 0
+    // != 0 si la pagina esta presente en memoria en el frame indicado por
+    //      el valor. Caso contrario el valor de la entrada se debe ignorar
     u8 flag_presencia;
+    // != 0 si se leyo o escribio
     u8 flag_uso;
-    // Modificada si != 0
+    // != 0 si se escribio
     u8 flag_modif;
     union {
         struct page1_table_entry p1;
         struct page2_table_entry p2;
         u32 val;
     };
+} page_table_entry;
+
+enum page_table_state
+{
+    PT_STATE_UNUSED = 0,
+    PT_STATE_LVL2,
+    PT_STATE_LVL1,
 };
 typedef struct page_table
 {
-    // zero if unused
-    u8 in_use;
+    enum page_table_state state;
     struct page_table_entry *entries;
 } page_table;
 
@@ -53,15 +62,16 @@ u32 get_unused_pagetable()
 {
     for (page_table *it = page_tables, *end = page_tables + page_tables_elem_count; it != end; it++)
     {
-        if (it->in_use == 0)
+        if (it->state == PT_STATE_UNUSED)
         {
-            it->in_use = 1;
+            it->state = PT_STATE_LVL2;
             memset(it->entries, 0, pags_x_tabl * sizeof(struct page_table_entry));
             u32 page_num = ((int)it - (int)page_tables) / sizeof(struct page_table);
             log_info(logger, "usando nro de pagina vacia %d", page_num);
             return page_num;
         }
     }
+    // No hay tablas de paginas libres, reallocar el array incrementado x2 el tamanio
     int old_count = page_tables_elem_count;
     page_tables_elem_count *= 2;
     page_tables = realloc(page_tables, page_tables_elem_count * sizeof(struct page_table));
@@ -69,9 +79,9 @@ u32 get_unused_pagetable()
     {
         it->entries = malloc(pags_x_tabl * sizeof(struct page_table_entry));
         memset(it->entries, 0, pags_x_tabl * sizeof(struct page_table_entry));
-        it->in_use = 0;
+        it->state = 0;
     }
-    page_tables[old_count].in_use = 1;
+    page_tables[old_count].state = PT_STATE_LVL2;
     return old_count;
 }
 
@@ -122,13 +132,13 @@ int main(int argc, char **argv)
 
     memoria_ram = malloc(tam_mem);
     memset(memoria_ram, 0, tam_mem);
-    page_tables_elem_count = 1024;
+    page_tables_elem_count = 16;
     page_tables = malloc(sizeof(page_table) * page_tables_elem_count);
     for (page_table *it = page_tables, *end = page_tables + page_tables_elem_count; it != end; it++)
     {
         it->entries = malloc(pags_x_tabl * sizeof(struct page_table_entry));
         memset(it->entries, 0, pags_x_tabl * sizeof(struct page_table_entry));
-        it->in_use = 0;
+        it->state = PT_STATE_UNUSED;
     }
 
     while (true)
@@ -175,7 +185,7 @@ void *connection_handler_thread(void *_sock)
 
             pthread_mutex_lock(&m);
             u32 nro_pagina_1er_nivel = get_unused_pagetable();
-            page_tables[nro_pagina_1er_nivel].in_use = 2;
+            page_tables[nro_pagina_1er_nivel].state = PT_STATE_LVL1;
             //TODO: Create file
             pthread_mutex_unlock(&m);
             log_info(logger, "Recibido NEW_PROCESS pid %d respondiendo nro_pagina_1er_nivel: %d", pid, nro_pagina_1er_nivel);
@@ -211,14 +221,15 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido END_PROCESS pid %d", pid);
 
             pthread_mutex_lock(&m);
-            page_tables[nro_pag1].in_use = 0;
+            //TODO: Delete file
+            page_tables[nro_pag1].state = PT_STATE_UNUSED;
             struct page_table_entry *entry = page_tables[nro_pag1].entries;
             for (struct page_table_entry *end = entry + pags_x_tabl; end != entry; entry++)
             {
                 if (entry->flag_presencia != 0)
                 {
                     u32 num_pag2 = entry->val;
-                    page_tables[num_pag2].in_use = 0;
+                    page_tables[num_pag2].state = PT_STATE_UNUSED;
                 }
             }
             pthread_mutex_unlock(&m);
@@ -231,20 +242,30 @@ void *connection_handler_thread(void *_sock)
             u32 addr = read_u32(network_buf.buf);
             u32 is_write = read_u32(network_buf.buf + 4);
             u32 val = read_u32(network_buf.buf + 8);
+            u32 page_lvl2_num = read_u32(network_buf.buf + 12);
+            u32 page_offset = read_u32(network_buf.buf + 16);
             log_info(logger, "Recibido READWRITE addr %d is_write %d val %d", addr, is_write, val);
             assert_and_log(addr < tam_mem, "La direccion de lectura/escritura debe ser menor al tamanio de la memoria");
+            assert_and_log(page_offset < pags_x_tabl, "Page offset < paginas por tabla");
+            assert_and_log(page_lvl2_num < page_tables_elem_count, "Out of bounds page num");
 
             u32 *addr_ptr = ((u8 *)memoria_ram) + addr;
 
             pthread_mutex_lock(&m);
+            struct page_table_entry *e = &page_tables[page_lvl2_num].entries[page_offset];
             if (is_write == 0)
             { // READ
                 *(u32 *)(network_buf.buf) = *addr_ptr;
+
+                e->flag_uso = 1;
             }
             else
             { // WRITE
                 *addr_ptr = val;
                 *(u32 *)(network_buf.buf) = val;
+
+                e->flag_uso = 1;
+                e->flag_modif = 1;
             }
             pthread_mutex_unlock(&m);
 
@@ -260,21 +281,23 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido PAGEREAD page_num %d offset %d", page_num, page_offset);
 
             pthread_mutex_lock(&m);
-            assert_and_log(page_tables[page_num].in_use != 0, "La tabla de paginas de la que se lee debe estar en uso");
+            assert_and_log(page_tables[page_num].state != PT_STATE_UNUSED,
+                           "La tabla de paginas de la que se lee debe estar en uso");
 
             struct page_table *p = &page_tables[page_num];
             struct page_table_entry *e = &(p->entries[page_offset]);
             u32 offset_present = e->flag_presencia != 0;
-            log_info(logger, "presencia %d in_use %d", e->flag_presencia, p->in_use);
+            log_info(logger, "presencia %d state %d", e->flag_presencia, p->state);
             if (!offset_present)
             {
-                if (p->in_use == 2)
-                { // Pag 1er nivel
+                // PAGE FAULT
+                if (p->state == PT_STATE_LVL1)
+                { // Pag 1er nivel, asignar pagina de 2do nivel
                     e->val = get_unused_pagetable();
                     e->flag_presencia = 1;
                 }
-                else if (p->in_use == 1)
-                { // Pag 2do nivel
+                else if (p->state == PT_STATE_LVL2)
+                { // Pag 2do nivel, asignar marco
                     //TODO: Asignar marco
                     e->val = 0;
                     e->flag_presencia = 1;

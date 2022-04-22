@@ -2,6 +2,7 @@
 
 t_log *logger;
 
+u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val);
 void *interrupt_accept_thread(void *);
 volatile int interrupt_pid = 0;
 volatile int interrupt = false;
@@ -14,17 +15,44 @@ enum tlb_alg
 };
 enum tlb_alg tlb_alg;
 u32 entradas_x_pagina;
+volatile int mem_sock;
 u32 tam_pag;
 typedef struct entrada_tlb
 {
-    u32 page_digits;
     u32 marco;
+    u32 page_digits;
+    u32 page_lvl1;
+    u32 page_lvl2;
+    u32 page_offset;
     int64_t use_timestamp;
+
+    struct entrada_tlb *next;
+    struct entrada_tlb *prev;
 } entrada_tlb;
 #define PAGE_DIGITS_UNUSED ((u32)(0x0FFFFFFF))
 int entradas_tlb;
 entrada_tlb *tlb;
-int last_fifo_replaced_tlb_idx = 0;
+// Misma estructura que las listas de kernel, ver comentario en kernel.c
+entrada_tlb tlb_fifo_list;
+void tlb_fifo_list_remove(entrada_tlb *t)
+{
+    t->next->prev = t->prev;
+    t->prev->next = t->next;
+
+    t->next = NULL;
+    t->prev = NULL;
+}
+void tlb_fifo_list_add(entrada_tlb *t)
+{
+    log_info(logger, "tlb_fifo_list_add L %p prev %p next %p t %p",
+             &tlb_fifo_list, tlb_fifo_list.prev, tlb_fifo_list.next, t);
+    t->next = tlb_fifo_list.next;
+    tlb_fifo_list.next->prev = t;
+    tlb_fifo_list.next = t;
+    t->prev = &tlb_fifo_list;
+    log_info(logger, "after tlb_fifo_list_add L %p prev %p next %p t %p",
+             &tlb_fifo_list, tlb_fifo_list.prev, tlb_fifo_list.next, t);
+}
 
 void retornar_dispatch(int sockfd, t_buflen *network_buf, u32 pid, u32 pc, u32 rafaga, u32 bloqueo_io)
 {
@@ -37,7 +65,7 @@ void retornar_dispatch(int sockfd, t_buflen *network_buf, u32 pid, u32 pc, u32 r
 
     send_buffer(sockfd, network_buf->buf, sizeof(u32) * 4);
 }
-u32 translate_addr(u32 log_addr, u32 page1, int mem_sock, t_buflen *buf);
+u32 translate_addr(u32 log_addr, u32 page1, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb);
 
 int main(int argc, char **argv)
 {
@@ -87,6 +115,8 @@ int main(int argc, char **argv)
         tlb_entry->marco = PAGE_DIGITS_UNUSED;
         tlb_entry->use_timestamp = 0;
     }
+    tlb_fifo_list.prev = &tlb_fifo_list;
+    tlb_fifo_list.next = &tlb_fifo_list;
 
     t_buflen network_buf = make_buf(1024);
     log_info(logger, "Aceptando conexion DISPATCH ...");
@@ -100,7 +130,7 @@ int main(int argc, char **argv)
     close(sock_listen_int);
 
     log_info(logger, "Conectando a MEMORIA ...");
-    int mem_sock = open_socket_conn(ip_memoria, puerto_memoria);
+    mem_sock = open_socket_conn(ip_memoria, puerto_memoria);
     log_info(logger, "Conexion con MEMORIA establecida socket %d", mem_sock);
     send_handshake_cpu_memoria(mem_sock, &network_buf, &entradas_x_pagina, &tam_pag);
     log_info(logger, "Handshake hecho con MEMORIA: tam_pagina:%d entradas_x_pagina:%d",
@@ -159,8 +189,7 @@ int main(int argc, char **argv)
             if (inst_op == INST_COPY)
             {
                 u32 copy_src = inst.args[1];
-                u32 phys_addr = translate_addr(copy_src, tabla_pags_1er_niv, mem_sock, &network_buf);
-                fetched_val = send_mem_readwrite(mem_sock, &network_buf, phys_addr, 0, 0);
+                fetched_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_src, 0, 0);
             }
             // EXECUTE
             switch (inst_op)
@@ -195,8 +224,7 @@ int main(int argc, char **argv)
                 u32 read_addr = inst.args[0];
                 log_info(logger, "Ejecutando READ %d", read_addr);
 
-                u32 phys_addr = translate_addr(read_addr, tabla_pags_1er_niv, mem_sock, &network_buf);
-                u32 read_val = send_mem_readwrite(mem_sock, &network_buf, phys_addr, 0, 0);
+                u32 read_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, read_addr, 0, 0);
                 log_info(logger, "Valor leido: %d", read_val);
                 break;
             }
@@ -206,8 +234,7 @@ int main(int argc, char **argv)
                 u32 write_val = inst.args[1];
                 log_info(logger, "Ejecutando WRITE *%d = %d", write_addr, write_val);
 
-                u32 phys_addr = translate_addr(write_addr, tabla_pags_1er_niv, mem_sock, &network_buf);
-                u32 value_written = send_mem_readwrite(mem_sock, &network_buf, phys_addr, 1, write_val);
+                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, write_addr, 1, write_val);
                 assert_and_log(write_val == value_written, "Valor escrito == valor retornado por memoria");
                 break;
             }
@@ -216,8 +243,7 @@ int main(int argc, char **argv)
                 u32 copy_dest = inst.args[0];
                 u32 copy_src = inst.args[1];
                 log_info(logger, "Ejecutando COPY *%d = *%d", copy_dest, copy_src);
-                u32 phys_addr = translate_addr(copy_dest, tabla_pags_1er_niv, mem_sock, &network_buf);
-                u32 value_written = send_mem_readwrite(mem_sock, &network_buf, phys_addr, 1, fetched_val);
+                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_dest, 1, fetched_val);
                 assert_and_log(fetched_val == value_written, "Valor escrito == valor retornado por memoria");
                 break;
             }
@@ -295,10 +321,15 @@ entrada_tlb *get_tlb_entry_to_replace()
     {
     case TLB_ALG_FIFO:
     {
-        entrada_tlb *ret = tlb + last_fifo_replaced_tlb_idx;
-        // TODO: Account for invalidations which are not idx-ordered
-        last_fifo_replaced_tlb_idx = (last_fifo_replaced_tlb_idx + 1) % entradas_tlb;
-        return ret;
+        entrada_tlb *first_in = tlb_fifo_list.prev;
+        log_info(logger, "L %p prev %p next %p",
+                 &tlb_fifo_list, tlb_fifo_list.prev, tlb_fifo_list.next);
+        assert_and_log(first_in != NULL && first_in != &tlb_fifo_list, "lista TLB FIFO no vacia si se necesita reemplazar");
+        tlb_fifo_list_remove(first_in);
+        first_in->page_digits = PAGE_DIGITS_UNUSED;
+        log_info(logger, "Reutilizando entrada tlb nro %d",
+                 (((int)first_in) - ((int)tlb)) / sizeof(entrada_tlb));
+        return first_in;
     }
     case TLB_ALG_LRU:
     {
@@ -311,36 +342,45 @@ entrada_tlb *get_tlb_entry_to_replace()
                 ret = tlb_entry;
             }
         }
+        tlb_fifo_list_remove(ret);
+        ret->page_digits = PAGE_DIGITS_UNUSED;
+        log_info(logger, "Reutilizando entrada tlb nro %d",
+                 (((int)ret) - ((int)tlb)) / sizeof(entrada_tlb));
         return ret;
     }
     }
     assert_and_log(0, "algoritmo invalido en get_tlb_entry_to_replace");
     return NULL;
 }
-u32 translate_addr(u32 log_addr, u32 page1, int mem_sock, t_buflen *buf)
+u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb)
 {
     u32 page_digits = log_addr / tam_pag;
     u32 offset_into_frame = log_addr % tam_pag;
 
-    u32 page1_idx = page_digits / entradas_x_pagina;
-    u32 page2_idx = page_digits % entradas_x_pagina;
+    u32 page_lvl1_idx = page_digits / entradas_x_pagina;
+    u32 page_lvl2_idx = page_digits % entradas_x_pagina;
 
     for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
     {
-        if (tlb_entry->page_digits == page_digits)
+        if (tlb_entry->page_digits == page_digits && tlb_entry->page_lvl1 == page_lvl1)
         {
+            log_info(logger, "TLB HIT logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d marco %d",
+                     log_addr, page_lvl1, tlb_entry->page_digits, page_lvl1_idx, page_lvl2_idx, tlb_entry->marco);
             tlb_entry->use_timestamp = timestamp();
+            *out_tlb = tlb_entry;
             return tlb_entry->marco + offset_into_frame;
         }
     }
+    log_info(logger, "TLB MISS logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d",
+             log_addr, page_lvl1, page_digits, page_lvl1_idx, page_lvl2_idx);
 
     u32 invalidation_count = 0;
     u32 *invalidations = NULL;
 
-    u32 page2_num = send_mem_page_read(mem_sock, buf, page1, page1_idx, &invalidation_count, &invalidations);
+    u32 page_lvl2_num = send_mem_page_read(mem_sock, buf, page_lvl1, page_lvl1_idx, &invalidation_count, &invalidations);
     assert_and_log(invalidation_count == 0, "Lectura de pagina de 1er nivel no invalida memoria");
 
-    u32 phys_addr_marco = send_mem_page_read(mem_sock, buf, page2_num, page2_idx, &invalidation_count, &invalidations);
+    u32 phys_addr_marco = send_mem_page_read(mem_sock, buf, page_lvl2_num, page_lvl2_idx, &invalidation_count, &invalidations);
 
     for (u32 *inv_end = invalidations + invalidation_count; invalidations != inv_end; invalidations++)
     {
@@ -353,9 +393,23 @@ u32 translate_addr(u32 log_addr, u32 page1, int mem_sock, t_buflen *buf)
         }
     }
     entrada_tlb *entry_to_replace = get_tlb_entry_to_replace();
+    log_info(logger, "Reemplazando entrada de TLB nro %d addr_marco %d",
+             (((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb), phys_addr_marco);
     entry_to_replace->marco = phys_addr_marco;
     entry_to_replace->page_digits = page_digits;
+    entry_to_replace->page_lvl1 = page_lvl1;
+    entry_to_replace->page_lvl2 = page_lvl2_num;
+    entry_to_replace->page_offset = page_lvl2_idx;
     entry_to_replace->use_timestamp = timestamp();
+    tlb_fifo_list_add(entry_to_replace);
+    *out_tlb = entry_to_replace;
 
     return phys_addr_marco + offset_into_frame;
+}
+
+u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val)
+{
+    entrada_tlb *out_tlb = NULL;
+    u32 phys_addr = translate_addr(addr, pag_lvl1, mem_sock, buf, &out_tlb);
+    return send_mem_readwrite(mem_sock, buf, phys_addr, is_write, val, out_tlb->page_lvl2, out_tlb->page_offset);
 }
