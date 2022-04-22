@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Make",
+            "type": "shell",
+            "command": "make clean && make memoria",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "MEMORIA Normal",
+            "type": "shell",
+            "command": "./exec",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "MEMORIA Valgrind",
+            "type": "shell",
+            "command": "./vexec",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}

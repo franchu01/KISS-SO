@@ -1,0 +1,62 @@
+{
+	"folders": [
+		{
+			"path": "shared"
+		},
+		{
+			"path": "kernel"
+		},
+		{
+			"path": "consola"
+		},
+		{
+			"path": "cpu"
+		},
+		{
+			"path": "memoria"
+		}
+	],
+	"launch": {
+		"configurations": [],
+		"compounds": [
+			{
+				"name": "Test All",
+				"configurations": [
+					"Test CPU",
+					"Test MEMORIA",
+					"Test KERNEL",
+					"Test CONSOLA",
+				]
+			}
+		]
+	},
+	"settings": {
+		"files.associations": {
+			"cpu.h": "c",
+			"memoria.h": "c",
+			"kernel.h": "c",
+			"consola.h": "c",
+			"readline.h": "c",
+			"shared_utils.h": "c",
+			"log.h": "c",
+			"config.h": "c",
+			"stdio.h": "c",
+			"unistd.h": "c",
+			"cstdio": "c",
+			"tests.h": "c",
+			"list.h": "c",
+			"stdbool.h": "c",
+			"cmath": "c",
+			"history.h": "c",
+			"system_error": "c",
+			"chrono": "c",
+			"algorithm": "c",
+			"array": "c",
+			"deque": "c",
+			"string": "c",
+			"unordered_map": "c",
+			"vector": "c",
+			"initializer_list": "c"
+		}
+	}
+}
