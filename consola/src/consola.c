@@ -80,7 +80,12 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
     {
         while (line_end != end && *line_end != '\n' && *line_end != '\0')
             line_end++;
-        finished = line_end == end;
+
+        char *line_end_trim_spaces = line_end - 1;
+        while (line_end_trim_spaces != b && *line_end_trim_spaces == ' ')
+            line_end_trim_spaces--;
+
+        finished = line_end == end || *line_end == '\0';
         if (finished)
         {
             static char buf[1024] = {};
@@ -111,7 +116,7 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
         {
             inst.code = INST_WRITE;
             inst.args[0] = atoi(line_start + 6);
-            char *second_arg = line_end;
+            char *second_arg = line_end_trim_spaces;
             while (*second_arg != ' ')
                 second_arg--;
             inst.args[1] = atoi(second_arg);
@@ -125,7 +130,7 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
         {
             inst.code = INST_COPY;
             inst.args[0] = atoi(line_start + 5);
-            char *second_arg = line_end;
+            char *second_arg = line_end_trim_spaces;
             while (*second_arg != ' ')
                 second_arg--;
             inst.args[1] = atoi(second_arg);
@@ -134,7 +139,7 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
         {
             inst.code = INST_EXIT;
         }
-        else if (*line_start == '\0' && finished)
+        else if (*line_end == '\0' && finished)
         {
             *out_count = ((int)out_buf - (int)inst_storage) / sizeof(*inst_storage);
             return inst_storage;
