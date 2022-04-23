@@ -2,14 +2,13 @@
 *.d
 /**/*.log
 
+# Binarios
 /consola/consola
 /cpu/cpu
 /kernel/kernel
 /memoria/memoria
 
-install_tmux.sh
 all_test_tmux.sh
-tmux_all.sh
 test_all.sh
 
 /logs
@@ -64,6 +63,3 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-
-/shared/include/old_code.h
-/shared/src/old_code.c
