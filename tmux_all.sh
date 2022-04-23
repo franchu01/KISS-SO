@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 tmux kill-session -t tp
 
 # Crear sesion
-tmux new-session -d -s tp './memoria/vexec'
+tmux new-session -d -s tp './vexec memoria'
 
 # Para cambiar Ctrl B por Ctrl A
 #set-option -g prefix C-A
@@ -23,13 +23,13 @@ tmux set -g pane-border-format "#{pane_index} #{pane_current_path}"
 tmux set-option remain-on-exit on
 
 sleep 0.5
-tmux split-window -f -v -t tp:1 -c cpu 'exec ./vexec'
+tmux split-window -f -v -t tp:1 'exec ./vexec cpu'
 tmux select-pane -t 1
 sleep 0.5
 tmux split-window -h -t tp -c kernel 'exec ./vexec'
 tmux select-pane -t 0
 sleep 0.5
-tmux split-window -h -t tp -c consola 'exec ./vexec ./test_file.txt 50'
+tmux split-window -h -t tp -c consola 'exec ./vexec ./insts.txt 50'
 
 # Entrar a la sesion
 tmux attach-session -t tp

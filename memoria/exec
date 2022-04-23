@@ -1,7 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")"
-FILE=memoria
-make clean && make $FILE
-if test -f "./$FILE"; then
-    ./$FILE "$@"
-fi

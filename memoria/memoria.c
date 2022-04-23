@@ -91,6 +91,16 @@ int main(int argc, char **argv)
         return run_tests();
 
     t_config *conf = config_create("./cfg/memoria.config");
+    if (!conf)
+    {
+        errno = 0;
+        conf = config_create("./memoria/cfg/memoria.config");
+        if (!conf)
+        {
+            puts("No se encontro el config ./cfg/memoria.config o ./memoria/cfg/memoria.config");
+            return -1;
+        }
+    }
 
     char *path_logger = config_get_string_value(conf, "ARCHIVO_LOG");
 

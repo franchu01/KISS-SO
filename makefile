@@ -1,12 +1,13 @@
 CCC ?=gcc
 CC=$(CCC)
-CFLAGS=-I./shared/include -I./kernel -I./consola -I./cpu -I./memoria -g -Wall -fno-strict-aliasing -Wno-incompatible-pointer-types
+INCLUDES=-I./shared/include -I./kernel -I./consola -I./cpu -I./memoria
+CFLAGS=$(INCLUDES) -g -Wall -fno-strict-aliasing -Wno-incompatible-pointer-types
 
 LIBS=-lcommons -lpthread -lreadline -lcunit -lrt -lm
 
 MODULES=cpu consola kernel memoria
 
-all: kernel memoria consola cpu
+all: $(MODULES)
 
 define MAKE_TARGETS
 
@@ -19,11 +20,6 @@ $(strip $1)/obj:
 
 # La regla ej. kernel va a kernel/kernel el path al binario
 $(strip $1): $(strip $1)/$(strip $1)
-$(warning x:$1)
-t=$(patsubst $1/%.c,$1/obj/%.o,$(wildcard $1/*.c))
-$(warning $(t))
-t2=$(wildcard $1/*.c)
-$(warning $(t2))
 # El binario compila $@ que es la regla osea su path, con las dependencias pasadas al compilador
 # Y depende de todos los archivos .c del directorio ej kernel/*.c substituidos como kernel/obj/*.o
 $(strip $1)/$(strip $1): $(strip $1)/obj/$(strip $1)_shared_utils.o $(patsubst $(strip $1)/%.c,$(strip $1)/obj/%.o,$(wildcard $(strip $1)/*.c))

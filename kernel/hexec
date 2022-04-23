@@ -1,7 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")"
-FILE=kernel
-make clean && make $FILE
-if test -f "./$FILE"; then
-    valgrind --tool=helgrind ./$FILE "$@"
-fi
