@@ -214,7 +214,7 @@ int main(int argc, char **argv)
             case INST_EXIT:
             {
                 int64_t elapsed = (timestamp() - inicio_ejecucion) / 1000;
-                log_info(logger, "Ejecutando EXIT con nuevo pc %d elapsed %d ms", pc, elapsed);
+                log_info(logger, "Ejecutando EXIT con nuevo pc %d elapsed %" PRId64 " ms", pc, elapsed);
 
                 retornar_dispatch(sock_disp, &network_buf, pid, pc, (u32)elapsed, 0);
                 goto after_while;
@@ -339,7 +339,7 @@ entrada_tlb *get_tlb_entry_to_replace()
         tlb_fifo_list_remove(first_in);
         first_in->page_digits = PAGE_DIGITS_UNUSED;
         log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
-                 (((int)first_in) - ((int)tlb)) / sizeof(entrada_tlb));
+                 (int)((((int)first_in) - ((int)tlb)) / sizeof(entrada_tlb)));
         return first_in;
     }
     case TLB_ALG_LRU:
@@ -356,7 +356,7 @@ entrada_tlb *get_tlb_entry_to_replace()
         tlb_fifo_list_remove(ret);
         ret->page_digits = PAGE_DIGITS_UNUSED;
         log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
-                 (((int)ret) - ((int)tlb)) / sizeof(entrada_tlb));
+                 (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
         return ret;
     }
     }
@@ -406,7 +406,7 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, ent
     entrada_tlb *entry_to_replace = get_tlb_entry_to_replace();
 
     log_info(logger, "Escribiendo entrada de TLB nro %d addr_marco %d",
-             (((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb), phys_addr_marco);
+             (int)((((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb)), phys_addr_marco);
     entry_to_replace->marco = phys_addr_marco;
     entry_to_replace->page_digits = page_digits;
     entry_to_replace->page_lvl1 = page_lvl1;

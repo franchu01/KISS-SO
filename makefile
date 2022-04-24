@@ -1,7 +1,7 @@
 CCC ?=gcc
 CC=$(CCC)
 INCLUDES=-I./shared/include -I./kernel -I./consola -I./cpu -I./memoria
-CFLAGS=$(INCLUDES) -g -Wall -fno-strict-aliasing -Wno-incompatible-pointer-types
+CFLAGS=$(INCLUDES) -g -Wall -fno-strict-aliasing -Wno-incompatible-pointer-types -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 
 LIBS=-lcommons -lpthread -lreadline -lcunit -lrt -lm
 

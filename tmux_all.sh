@@ -9,6 +9,7 @@ tmux new-session -d -s tp './vexec memoria'
 
 # Mouse
 tmux setw -g mouse on
+tmux unbind -T copy-mode MouseDragEnd1Pane
 # Para tmux < 1.6:
 tmux set-option -g prefix C-A
 tmux set-option -ga update-environment ' CCC'
