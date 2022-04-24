@@ -12,8 +12,5 @@ make all
 sudo make install
 cd $CWD
 echo -e "\n\nBuilding projects...\n\n"
-make -C ./cpu cpu
-make -C ./memoria memoria
-make -C ./kernel kernel
-make -C ./consola consola
+make all
 echo -e "\n\nDeploy done!\n\n"
