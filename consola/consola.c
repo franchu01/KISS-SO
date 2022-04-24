@@ -28,6 +28,11 @@ int main(int argc, char **argv)
     char *path_logger = config_get_string_value(conf, "ARCHIVO_LOG");
 
     logger = log_create(path_logger, "consola", true, LOG_LEVEL_INFO);
+    if (!logger)
+    {   
+        printf("No se pudo abrir el archivo de log %s\n", path_logger);
+        return -1;
+    }
 
     char *ip_kernel = config_get_string_value(conf, "IP_KERNEL");
     int puerto_kernel = config_get_int_value(conf, "PUERTO_KERNEL");

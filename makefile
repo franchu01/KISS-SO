@@ -16,7 +16,7 @@ define MAKE_TARGETS
 name=$(strip $1)
 # Crear el directorio de salida. Los .o dependen de esta regla
 $(strip $1)/obj:
-	mkdir $@
+	mkdir $$@
 
 # La regla ej. kernel va a kernel/kernel el path al binario
 $(strip $1): $(strip $1)/$(strip $1)
