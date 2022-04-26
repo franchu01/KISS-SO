@@ -190,7 +190,7 @@ enum codigo_mensaje
     MEMORIA_PAGEREAD,
     // KERNEL -> MEMORIA
     //
-    // IN: [ pid(u32) ]
+    // IN: [ pid(u32) tamanio(u32) ]
     //
     // OUT: [ nro_pagina_1er_nivel(u32) ]
     MEMORIA_NEW_PROCESS,
@@ -251,7 +251,7 @@ u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 va
 // NOTA: *marcos termina apuntando al buffer `buf, NO llamar a free() con ese puntero
 u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset, u32 *count_invals, u32 **marcos);
 // Devuelve nro pagina 1er nivel
-u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid);
+u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid, u32 tam_proc);
 void send_mem_process_suspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel);
 void send_mem_process_unsuspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel);
 void send_mem_end_process(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel);

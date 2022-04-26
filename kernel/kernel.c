@@ -280,7 +280,7 @@ int main(int argc, char **argv)
 
         pthread_mutex_lock(&scheduling_mutex);
         log_info(logger, "Avisando a MEMORIA...");
-        pcb->pag_1er_niv = send_mem_new_process(mem_sock, &network_buf, new_pid);
+        pcb->pag_1er_niv = send_mem_new_process(mem_sock, &network_buf, new_pid, tamanio);
         log_info(logger, "Nro de tabla de 1er nivel dado por MEMORIA: %d", pcb->pag_1er_niv);
         set_proc_state(pcb, PROC_STATE_NEW);
         long_term_scheduling();
@@ -325,9 +325,9 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
             if (p->state == PROC_STATE_SUSPENDED_RDY)
                 send_mem_process_unsuspended(mem_sock, &buf, p->pid, p->pag_1er_niv);
             else
-            { //NEW
-                // Se hace cuando se crea, no es necesario
-                //send_mem_new_process(mem_sock, &buf, p->pid);
+            { // NEW
+              //  Se hace cuando se crea, no es necesario
+              // send_mem_new_process(mem_sock, &buf, p->pid);
             }
         }
         else
@@ -439,7 +439,7 @@ void *dispatcher_thread(void *_p)
         }
         else
         {
-            //TODO: Verificar calculo estimacion
+            // TODO: Verificar calculo estimacion
             double ultima_estimacion = p->estimacion_rafaga;
             double ultima_rafaga_real = res.rafaga;
             p->estimacion_rafaga = (u32)floor(ultima_estimacion * (1.0 - alfa) + alfa * ultima_rafaga_real);

@@ -17,6 +17,7 @@ enum tlb_alg tlb_alg;
 u32 entradas_x_pagina;
 volatile int mem_sock;
 u32 tam_pag;
+// TODO: Arreglar estructura tlb segun enunciado v1.1
 typedef struct entrada_tlb
 {
     u32 marco;
@@ -84,7 +85,7 @@ int main(int argc, char **argv)
 
     logger = log_create(path_logger, "cpu", true, LOG_LEVEL_INFO);
     if (!logger)
-    {   
+    {
         printf("No se pudo abrir el archivo de log %s\n", path_logger);
         return -1;
     }
@@ -146,20 +147,6 @@ int main(int argc, char **argv)
     send_handshake_cpu_memoria(mem_sock, &network_buf, &entradas_x_pagina, &tam_pag);
     log_info(logger, "Handshake hecho con MEMORIA: tam_pagina:%d entradas_x_pagina:%d",
              tam_pag, entradas_x_pagina);
-
-    // Mem protocol tests:
-    /*
-    send_mem_end_process(mem_sock, &network_buf, 54);
-    log_info(logger, "send_mem_end_process");
-    u32 page = send_mem_new_process(mem_sock, &network_buf, 54);
-    log_info(logger, "send_mem_new_process %d", page);
-    u32 read_val = send_mem_readwrite(mem_sock, &network_buf, 546, 1, 333);
-    log_info(logger, "send_mem_new_readwrite %d", read_val);
-    u32 count;
-    u32 *frames;
-    u32 val = send_mem_page_read(mem_sock, &network_buf, 99, 123, &count, &frames);
-    log_info(logger, "send_mem_page_read %d count %d frames %p", val, count, frames);
-    */
 
     start_detached_thread(interrupt_accept_thread, (void *)sock_int);
 

@@ -162,8 +162,8 @@ int open_listener_socket(int port)
 struct handshake_msg
 {
     t_msgheader header;
-    //enum codigo_mensaje msg_code;
-    //u32 content_len;
+    // enum codigo_mensaje msg_code;
+    // u32 content_len;
     u8 handshake_signature;
     u8 trailer_signature;
 } __attribute__((packed));
@@ -356,10 +356,11 @@ void send_handshake_cpu_memoria(int sockfd, t_buflen *buf, u32 *out_cant_entrada
     *out_cant_entradas_x_pagina = read_u32(buf->buf);
     *out_tam_pagina = read_u32(buf->buf + sizeof(u32));
 }
-u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid)
+u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid, u32 tam_proc)
 {
     t_writer ww = writer(MEMORIA_NEW_PROCESS, buf);
     write_u32(&ww, pid);
+    write_u32(&ww, tam_proc);
     finish_writing(&ww);
     assert_and_log(send_buffer(sockfd, buf->buf, ww.written) == 0, "error send MEMORIA_NEW_PROCESS");
 
@@ -406,7 +407,7 @@ u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset,
 }
 void send_mem_process_suspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel)
 {
-    t_writer ww = writer(MEMORIA_PROCESS_UNSUSPENDED, buf);
+    t_writer ww = writer(MEMORIA_PROCESS_SUSPENDED, buf);
     write_u32(&ww, pid);
     write_u32(&ww, nro_pagina_1er_nivel);
     finish_writing(&ww);
@@ -414,7 +415,7 @@ void send_mem_process_suspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagi
 }
 void send_mem_process_unsuspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel)
 {
-    t_writer ww = writer(MEMORIA_PROCESS_SUSPENDED, buf);
+    t_writer ww = writer(MEMORIA_PROCESS_UNSUSPENDED, buf);
     write_u32(&ww, pid);
     write_u32(&ww, nro_pagina_1er_nivel);
     finish_writing(&ww);

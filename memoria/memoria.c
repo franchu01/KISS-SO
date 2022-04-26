@@ -35,7 +35,8 @@ typedef struct page_table_entry
     u8 flag_uso;
     // != 0 si se escribio
     u8 flag_modif;
-    union {
+    union
+    {
         struct page1_table_entry p1;
         struct page2_table_entry p2;
         u32 val;
@@ -57,6 +58,19 @@ typedef struct page_table
 page_table *page_tables = NULL;
 u32 page_tables_elem_count = 0;
 u32 *memoria_ram = NULL;
+int path_dir_fd;
+typedef struct proc_info
+{
+    u32 pid;
+    u32 tam_proc;
+    u32 nro_pag_lvl1;
+    int proc_swap_file_fd;
+    // 1 if suspended; 0 otherwise
+    u32 is_suspended;
+    // TODO: FIFO pagetable intrusive list?
+} proc_info;
+#define MAX_PROCS (1024 * 10)
+proc_info procs_info[MAX_PROCS] = {0};
 
 u32 get_unused_pagetable()
 {
@@ -134,6 +148,14 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    path_dir_fd = open(path_swap, 0);
+    if (path_dir_fd == -1)
+    {
+        log_error(logger, "Error abriendo directorio de swap \"%s\" strerror: %s", path_swap, strerror(errno));
+        log_destroy(logger);
+        return -1;
+    }
+
     log_info(logger, "Inicio proceso MEMORIA mem_size:%d page_size:%d retardo_swap:%d "
                      "retardo_mem:%d path_swap:%s alg_reemplazo:%s pags_x_tabla:%d marcos_x_proc:%d",
              tam_mem, tam_pag, retardo_swap, retardo_memoria, path_swap, alg_reemplazo, pags_x_tabl, marcos_x_proc);
@@ -160,6 +182,7 @@ int main(int argc, char **argv)
     }
 
     close(sock_listen);
+    close(path_dir_fd);
 
     log_info(logger, "Fin proceso MEMORIA");
     log_destroy(logger);
@@ -167,6 +190,17 @@ int main(int argc, char **argv)
 }
 
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+
+#define PID_TO_STACK_STR_PATH(pid, bufname)                                                                                             \
+    int __pid = (pid);                                                                                                                  \
+    char bufname[1024] = {0};                                                                                                           \
+    int snprintf_ret = snprintf(bufname, 1024, "./%d.swap", __pid);                                                                     \
+    if (snprintf_ret <= 0 || snprintf_ret >= 1024)                                                                                      \
+    {                                                                                                                                   \
+        log_error(logger, "Error snprintf creando archivo de swap pid %d dir_fd %d strerror: %s", __pid, path_dir_fd, strerror(errno)); \
+        log_destroy(logger);                                                                                                            \
+        exit(-1);                                                                                                                       \
+    }
 
 void *connection_handler_thread(void *_sock)
 {
@@ -192,13 +226,33 @@ void *connection_handler_thread(void *_sock)
         case MEMORIA_NEW_PROCESS:
         {
             u32 pid = read_u32(network_buf.buf);
+            u32 tam_proc = read_u32(network_buf.buf + 4);
 
             pthread_mutex_lock(&m);
             u32 nro_pagina_1er_nivel = get_unused_pagetable();
             page_tables[nro_pagina_1er_nivel].state = PT_STATE_LVL1;
-            //TODO: Create file
+            log_info(logger, "Recibido NEW_PROCESS pid %d tam_proc respondiendo nro_pagina_1er_nivel:%d "
+                             "y creando archivo de swap",
+                     pid, tam_proc, nro_pagina_1er_nivel);
+
+            // Create file
+            assert_and_log(pid < MAX_PROCS, "pid menor a MAX_PROCS");
+            PID_TO_STACK_STR_PATH(pid, stackbuf);
+            int swap_file_fd = openat(path_dir_fd, stackbuf, O_CREAT | O_RDWR, S_IXUSR | S_IRWXG);
+            if (swap_file_fd == -1)
+            {
+                log_error(logger, "Error openat creando archivo de swap pid %d dir_fd %d strerror: %s", pid, path_dir_fd, strerror(errno));
+                log_destroy(logger);
+                exit(-1);
+            }
+            assert_and_log(ftruncate(swap_file_fd, tam_proc) == 0, "ftruncate de fd abierto no falla");
+            proc_info *proc_info = &procs_info[pid];
+            proc_info->pid = pid;
+            proc_info->tam_proc = tam_proc;
+            proc_info->nro_pag_lvl1 = nro_pagina_1er_nivel;
+            proc_info->is_suspended = 0;
+            proc_info->proc_swap_file_fd = swap_file_fd;
             pthread_mutex_unlock(&m);
-            log_info(logger, "Recibido NEW_PROCESS pid %d respondiendo nro_pagina_1er_nivel: %d", pid, nro_pagina_1er_nivel);
 
             *(u32 *)(network_buf.buf) = nro_pagina_1er_nivel;
             send_buffer(sock, network_buf.buf, sizeof(u32));
@@ -209,8 +263,37 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
             log_info(logger, "Recibido PROCESS_SUSPENDED pid %d", pid);
-            // TODO: SUSPEND
             pthread_mutex_lock(&m);
+            procs_info[pid].is_suspended = 1;
+            int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+            struct page_table_entry *entry_lvl1 = page_tables[nro_pag1].entries;
+            int nro_pag = 0;
+            for (struct page_table_entry *end = entry_lvl1 + pags_x_tabl; end != entry_lvl1; entry_lvl1++)
+            {
+                if (entry_lvl1->flag_presencia != 0)
+                {
+                    u32 num_pag2 = entry_lvl1->val;
+                    struct page_table_entry *entry_lvl2 = page_tables[num_pag2].entries;
+                    for (struct page_table_entry *end2 = entry_lvl2 + pags_x_tabl; end2 != entry_lvl2; entry_lvl2++)
+                    {
+                        if (entry_lvl2->flag_presencia != 0)
+                        {
+                            log_info(logger, "TODO: Escribir en swap nro de pagina lvl2 %d entrada %d",
+                                     num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)));
+                            int marco = entry_lvl2->val;
+                            assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
+                            int offset =
+                                pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
+                            entry_lvl2->flag_presencia = 0;
+                        }
+                        nro_pag += 1;
+                    }
+                }
+                else
+                {
+                    nro_pag += pags_x_tabl;
+                }
+            }
             pthread_mutex_unlock(&m);
             break;
         }
@@ -219,8 +302,8 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
             log_info(logger, "Recibido PROCESS_UNSUSPENDED pid %d", pid);
-            // TODO: UNSUSPEND
             pthread_mutex_lock(&m);
+            procs_info[pid].is_suspended = 0;
             pthread_mutex_unlock(&m);
             break;
         }
@@ -231,7 +314,11 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido END_PROCESS pid %d", pid);
 
             pthread_mutex_lock(&m);
-            //TODO: Delete file
+            int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+            PID_TO_STACK_STR_PATH(pid, stackbuf);
+            assert_and_log(close(swap_file_fd) == 0, "close swap file fd");
+            assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file");
+
             page_tables[nro_pag1].state = PT_STATE_UNUSED;
             struct page_table_entry *entry = page_tables[nro_pag1].entries;
             for (struct page_table_entry *end = entry + pags_x_tabl; end != entry; entry++)
@@ -308,7 +395,7 @@ void *connection_handler_thread(void *_sock)
                 }
                 else if (p->state == PT_STATE_LVL2)
                 { // Pag 2do nivel, asignar marco
-                    //TODO: Asignar marco
+                    // TODO: Asignar marco, invalidar de ser necesario
                     e->val = 0;
                     e->flag_presencia = 1;
                 }
@@ -321,7 +408,7 @@ void *connection_handler_thread(void *_sock)
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = page_num_or_frame_num;
-            // TODO: Invalidations
+            // TODO: devolver las paginas invalidadas de cuando se asigno el marco
             u32 invalidation_count = 0;
             *(u32 *)(network_buf.buf + 4) = invalidation_count;
             send_buffer(sock, network_buf.buf, sizeof(u32) * 2);
