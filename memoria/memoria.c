@@ -231,7 +231,7 @@ void *connection_handler_thread(void *_sock)
             pthread_mutex_lock(&m);
             u32 nro_pagina_1er_nivel = get_unused_pagetable();
             page_tables[nro_pagina_1er_nivel].state = PT_STATE_LVL1;
-            log_info(logger, "Recibido NEW_PROCESS pid %d tam_proc respondiendo nro_pagina_1er_nivel:%d "
+            log_info(logger, "Recibido NEW_PROCESS pid %d tam_proc %d respondiendo nro_pagina_1er_nivel:%d "
                              "y creando archivo de swap",
                      pid, tam_proc, nro_pagina_1er_nivel);
 
