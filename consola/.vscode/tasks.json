@@ -4,7 +4,7 @@
         {
             "label": "Make",
             "type": "shell",
-            "command": "make clean && make consola",
+            "command": "cd .. && make clean && make consola",
             "problemMatcher": [
                 "$gcc"
             ],
@@ -14,17 +14,9 @@
             }
         },
         {
-            "label": "CONSOLA Normal",
-            "type": "shell",
-            "command": "./exec",
-            "problemMatcher": [
-                "$gcc"
-            ]
-        },
-        {
             "label": "CONSOLA Valgrind",
             "type": "shell",
-            "command": "./vexec",
+            "command": "../vexec consola",
             "problemMatcher": [
                 "$gcc"
             ]

@@ -4,7 +4,7 @@
         {
             "label": "Make",
             "type": "shell",
-            "command": "make clean && make memoria",
+            "command": "cd .. && make clean && make memoria",
             "problemMatcher": [
                 "$gcc"
             ],
@@ -14,17 +14,9 @@
             }
         },
         {
-            "label": "MEMORIA Normal",
-            "type": "shell",
-            "command": "./exec",
-            "problemMatcher": [
-                "$gcc"
-            ]
-        },
-        {
             "label": "MEMORIA Valgrind",
             "type": "shell",
-            "command": "./vexec",
+            "command": "../vexec memoria",
             "problemMatcher": [
                 "$gcc"
             ]
