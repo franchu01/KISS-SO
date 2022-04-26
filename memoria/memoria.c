@@ -339,30 +339,51 @@ void *connection_handler_thread(void *_sock)
             u32 addr = read_u32(network_buf.buf);
             u32 is_write = read_u32(network_buf.buf + 4);
             u32 val = read_u32(network_buf.buf + 8);
-            u32 page_lvl2_num = read_u32(network_buf.buf + 12);
-            u32 page_offset = read_u32(network_buf.buf + 16);
+            u32 pid = read_u32(network_buf.buf + 12);
+            u32 page_lvl1_num = procs_info[pid].nro_pag_lvl1;
+            u32 frame_addr = (addr / tam_pag) * tam_pag;
             log_info(logger, "Recibido READWRITE addr %d is_write %d val %d", addr, is_write, val);
             assert_and_log(addr < tam_mem, "La direccion de lectura/escritura debe ser menor al tamanio de la memoria");
-            assert_and_log(page_offset < pags_x_tabl, "Page offset < paginas por tabla");
-            assert_and_log(page_lvl2_num < page_tables_elem_count, "Out of bounds page num");
 
             u32 *addr_ptr = ((u8 *)memoria_ram) + addr;
 
             pthread_mutex_lock(&m);
-            struct page_table_entry *e = &page_tables[page_lvl2_num].entries[page_offset];
+            struct page_table_entry *entry_lvl1 = page_tables[page_lvl1_num].entries;
+            struct page_table_entry *addr_pagetable_entry = NULL;
+            for (struct page_table_entry *end = entry_lvl1 + pags_x_tabl; end != entry_lvl1; entry_lvl1++)
+            {
+                if (entry_lvl1->flag_presencia != 0)
+                {
+                    u32 num_pag2 = entry_lvl1->val;
+                    struct page_table_entry *entry_lvl2 = page_tables[num_pag2].entries;
+                    for (struct page_table_entry *end2 = entry_lvl2 + pags_x_tabl; end2 != entry_lvl2; entry_lvl2++)
+                    {
+                        if (entry_lvl2->flag_presencia != 0 && entry_lvl2->val == frame_addr)
+                        {
+                            addr_pagetable_entry = entry_lvl2;
+                            log_info(logger, "Encontrado marco de addr_phys %d en tabla_lvl1 %d de pid %d, en entrada tabla_lvl1 %d num_tabla_lvl2 %d offset_lvl2 %d addr_marco %d",
+                                     addr, page_lvl1_num, pid,
+                                     ((int)entry_lvl1 - (int)page_tables[page_lvl1_num].entries) / sizeof(struct page_table_entry),
+                                     num_pag2,
+                                     ((int)entry_lvl2 - (int)page_tables[num_pag2].entries) / sizeof(struct page_table_entry), frame_addr);
+                        }
+                    }
+                }
+            }
+            assert_and_log(addr_pagetable_entry != NULL, "No se encontro el marco de la direccion en la tabla de paginas del pid");
             if (is_write == 0)
             { // READ
                 *(u32 *)(network_buf.buf) = *addr_ptr;
 
-                e->flag_uso = 1;
+                addr_pagetable_entry->flag_uso = 1;
             }
             else
             { // WRITE
                 *addr_ptr = val;
                 *(u32 *)(network_buf.buf) = val;
 
-                e->flag_uso = 1;
-                e->flag_modif = 1;
+                addr_pagetable_entry->flag_uso = 1;
+                addr_pagetable_entry->flag_modif = 1;
             }
             pthread_mutex_unlock(&m);
 

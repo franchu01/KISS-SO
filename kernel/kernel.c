@@ -3,7 +3,7 @@
 t_log *logger;
 
 void *dispatcher_thread(void *_p);
-void *single_blocked_proc_thread(void *_params);
+void *io_device_thread(void *_params);
 
 int estimacion_inicial;
 int grado_multiprogramacion;
@@ -62,6 +62,9 @@ typedef struct pcb
     inst_t *insts;
     u32 pag_1er_niv;
 
+    // Usado solo para mandar este dato al hilo de IO
+    u32 block_ms;
+
     // socket para de
     int consola_sock;
 
@@ -74,6 +77,8 @@ void set_proc_state(pcb_t *p, enum estado_proceso s);
 pthread_mutex_t scheduling_mutex = PTHREAD_MUTEX_INITIALIZER;
 // Para no tener espera activa en el hilo dispatcher, usamos un semaforo
 sem_t dispatcher_sema;
+// Para no tener espera activa en el hilo que simula un dispositivo de IO
+sem_t io_device_sema;
 // Son pcb's sentinelas para listas. La lista es circular, el fin es cuando ->next == &lista_X
 // ->next es el 1er elem, ->prev es el ultimo
 //
@@ -182,6 +187,7 @@ int main(int argc, char **argv)
     init_pcb_list(&lista_bloq);
     init_pcb_list(&lista_susp_bloq);
     assert(sem_init(&dispatcher_sema, 0, 0) == 0);
+    assert(sem_init(&io_device_sema, 0, 0) == 0);
 
     if (argc > 1 && strcmp(argv[1], "-test") == 0)
         return run_tests();
@@ -247,6 +253,7 @@ int main(int argc, char **argv)
     int sock_listen = open_listener_socket(puerto);
 
     start_detached_thread(dispatcher_thread, (void *)0);
+    start_detached_thread(io_device_thread, (void *)0);
 
     t_buflen network_buf = make_buf(1024);
     while (true)
@@ -293,12 +300,10 @@ int main(int argc, char **argv)
     log_info(logger, "Fin proceso KERNEL");
     log_destroy(logger);
     config_destroy(conf);
+
+    assert(sem_destroy(&dispatcher_sema) == 0);
+    assert(sem_destroy(&io_device_sema) == 0);
 }
-struct pcbptr_and_blocktime
-{
-    pcb_t *p;
-    u32 block_ms;
-};
 void set_proc_state(pcb_t *p, enum estado_proceso s)
 {
     log_info(logger, "Pasando proceso pid %d del estado %s a %s",
@@ -447,11 +452,9 @@ void *dispatcher_thread(void *_p)
             p->pc = res.pc;
             if (res.bloqueo_io != 0)
             { // BLOQUEADO
+                p->block_ms = res.bloqueo_io;
                 set_proc_state(p, PROC_STATE_BLOCKED);
-                struct pcbptr_and_blocktime *params = malloc(sizeof(struct pcbptr_and_blocktime));
-                params->block_ms = res.bloqueo_io;
-                params->p = p;
-                start_detached_thread(single_blocked_proc_thread, (void *)params);
+                assert(sem_post(&io_device_sema) == 0);
             }
             else
             { // Vuelta a RDY (interrupt)
@@ -467,46 +470,62 @@ void *dispatcher_thread(void *_p)
     return (void *)0;
 }
 
-// Recibe como parametro `struct pcbptr_and_blocktime*`
-// El pcb que se recibe debe estar BLOQUEADO
-void *single_blocked_proc_thread(void *_params)
+void *io_device_thread(void *_unused)
 {
-    struct pcbptr_and_blocktime *params = _params;
-    pcb_t *pcb = params->p;
-    u32 wait_ms = params->block_ms;
-
-    assert(pcb->state == PROC_STATE_BLOCKED);
-
-    if (wait_ms > tiempo_maximo_bloqueado)
+    while (true)
     {
-        u32 remaining_wait_ms_after_suspend = wait_ms - tiempo_maximo_bloqueado;
-        log_info(logger, "Bloqueando pid %d por %d ms", pcb->pid, tiempo_maximo_bloqueado);
-        usleep(1000 * tiempo_maximo_bloqueado);
+        assert(sem_wait(&io_device_sema) == 0);
 
         pthread_mutex_lock(&scheduling_mutex);
-        set_proc_state(pcb, PROC_STATE_SUSPENDED_BLOCKED);
-        mid_term_scheduling();
-        pthread_mutex_unlock(&scheduling_mutex);
+        pcb_t *pcb = pop(&lista_bloq);
+        if (pcb == NULL)
+        {
+            // Spurious wakeup
+            pthread_mutex_unlock(&scheduling_mutex);
+            continue;
+        }
+        u32 wait_ms = pcb->block_ms;
 
-        usleep(1000 * remaining_wait_ms_after_suspend);
+        assert(pcb->state == PROC_STATE_BLOCKED);
 
-        pthread_mutex_lock(&scheduling_mutex);
-        set_proc_state(pcb, PROC_STATE_SUSPENDED_RDY);
-        mid_term_scheduling();
-        pthread_mutex_unlock(&scheduling_mutex);
+        if (wait_ms > tiempo_maximo_bloqueado)
+        {
+            u32 remaining_wait_ms_after_suspend = wait_ms - tiempo_maximo_bloqueado;
+            log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando (Va a suspenderse)", pcb->pid, wait_ms);
+            pthread_mutex_unlock(&scheduling_mutex);
+
+            usleep(1000 * tiempo_maximo_bloqueado);
+
+            pthread_mutex_lock(&scheduling_mutex);
+            log_info(logger, "Pasando pid %d a SUSPENDED_BLOCKED luego de %d ms de bloqueo, quedan %d ms, bloqueando",
+                     pcb->pid, tiempo_maximo_bloqueado, wait_ms);
+            set_proc_state(pcb, PROC_STATE_SUSPENDED_BLOCKED);
+            mid_term_scheduling();
+            pthread_mutex_unlock(&scheduling_mutex);
+
+            usleep(1000 * remaining_wait_ms_after_suspend);
+
+            pthread_mutex_lock(&scheduling_mutex);
+            log_info(logger, "Terminada IO pid %d", pcb->pid);
+            set_proc_state(pcb, PROC_STATE_SUSPENDED_RDY);
+            mid_term_scheduling();
+            pthread_mutex_unlock(&scheduling_mutex);
+        }
+        else
+        {
+            log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando", pcb->pid, wait_ms);
+            pthread_mutex_unlock(&scheduling_mutex);
+
+            usleep(1000 * wait_ms);
+
+            pthread_mutex_lock(&scheduling_mutex);
+            log_info(logger, "Terminada IO pid %d", pcb->pid);
+            set_proc_state(pcb, PROC_STATE_RDY);
+            mid_term_scheduling();
+            pthread_mutex_unlock(&scheduling_mutex);
+        }
     }
-    else
-    {
-        log_info(logger, "Bloqueando %d por %d ms", pcb->pid, wait_ms);
-        usleep(1000 * wait_ms);
 
-        pthread_mutex_lock(&scheduling_mutex);
-        set_proc_state(pcb, PROC_STATE_RDY);
-        mid_term_scheduling();
-        pthread_mutex_unlock(&scheduling_mutex);
-    }
-
-    free(_params);
     return (void *)0;
 }
 

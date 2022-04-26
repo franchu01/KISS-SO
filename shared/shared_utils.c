@@ -367,15 +367,14 @@ u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid, u32 tam_proc)
     assert_and_log(recv_buffer(sockfd, buf->buf, sizeof(u32)) == 0, "error recv MEMORIA_NEW_PROCESS");
     return read_u32(buf->buf);
 }
-u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 val, u32 page_lvl2_num, u32 page_offset)
+u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 val, u32 pid)
 {
     t_writer ww = writer(MEMORIA_READWRITE, buf);
     t_writer *w = &ww;
     write_u32(w, addr);
     write_u32(w, is_write);
     write_u32(w, val);
-    write_u32(w, page_lvl2_num);
-    write_u32(w, page_offset);
+    write_u32(w, pid);
     finish_writing(w);
     assert_and_log(send_buffer(sockfd, buf->buf, w->written) == 0, "error send MEMORIA_READWRITE");
 

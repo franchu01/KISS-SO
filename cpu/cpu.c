@@ -2,7 +2,7 @@
 
 t_log *logger;
 
-u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val);
+u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val, u32 pid);
 void *interrupt_accept_thread(void *);
 volatile int interrupt_pid = 0;
 volatile int interrupt = false;
@@ -22,34 +22,12 @@ typedef struct entrada_tlb
 {
     u32 marco;
     u32 page_digits;
-    u32 page_lvl1;
-    u32 page_lvl2;
-    u32 page_offset;
     int64_t use_timestamp;
-
-    struct entrada_tlb *next;
-    struct entrada_tlb *prev;
+    int64_t requested_timestamp;
 } entrada_tlb;
 #define PAGE_DIGITS_UNUSED ((u32)(0x0FFFFFFF))
 int entradas_tlb;
 entrada_tlb *tlb;
-// Misma estructura que las listas de kernel, ver comentario en kernel.c
-entrada_tlb tlb_fifo_list;
-void tlb_fifo_list_remove(entrada_tlb *t)
-{
-    t->next->prev = t->prev;
-    t->prev->next = t->next;
-
-    t->next = NULL;
-    t->prev = NULL;
-}
-void tlb_fifo_list_add(entrada_tlb *t)
-{
-    t->next = tlb_fifo_list.next;
-    tlb_fifo_list.next->prev = t;
-    tlb_fifo_list.next = t;
-    t->prev = &tlb_fifo_list;
-}
 
 void retornar_dispatch(int sockfd, t_buflen *network_buf, u32 pid, u32 pc, u32 rafaga, u32 bloqueo_io)
 {
@@ -127,8 +105,6 @@ int main(int argc, char **argv)
         tlb_entry->marco = PAGE_DIGITS_UNUSED;
         tlb_entry->use_timestamp = 0;
     }
-    tlb_fifo_list.prev = &tlb_fifo_list;
-    tlb_fifo_list.next = &tlb_fifo_list;
 
     t_buflen network_buf = make_buf(1024);
     log_info(logger, "Aceptando conexion DISPATCH ...");
@@ -172,6 +148,13 @@ int main(int argc, char **argv)
 
         int64_t inicio_ejecucion = timestamp();
         log_info(logger, "Inicio ciclo DISPATCH timestamp %" PRId64 "", inicio_ejecucion);
+        // Flush TLB
+        for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
+        {
+            tlb_entry->page_digits = PAGE_DIGITS_UNUSED;
+            tlb_entry->marco = PAGE_DIGITS_UNUSED;
+            tlb_entry->use_timestamp = 0;
+        }
 
         while (true)
         {
@@ -187,7 +170,7 @@ int main(int argc, char **argv)
             if (inst_op == INST_COPY)
             {
                 u32 copy_src = inst.args[1];
-                fetched_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_src, 0, 0);
+                fetched_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_src, 0, 0, pid);
             }
             // EXECUTE
             switch (inst_op)
@@ -222,7 +205,7 @@ int main(int argc, char **argv)
                 u32 read_addr = inst.args[0];
                 log_info(logger, "Ejecutando READ %d", read_addr);
 
-                u32 read_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, read_addr, 0, 0);
+                u32 read_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, read_addr, 0, 0, pid);
                 log_info(logger, "Valor leido: %d", read_val);
                 break;
             }
@@ -232,7 +215,7 @@ int main(int argc, char **argv)
                 u32 write_val = inst.args[1];
                 log_info(logger, "Ejecutando WRITE *%d = %d", write_addr, write_val);
 
-                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, write_addr, 1, write_val);
+                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, write_addr, 1, write_val, pid);
                 assert_and_log(write_val == value_written, "Valor escrito == valor retornado por memoria");
                 break;
             }
@@ -241,7 +224,7 @@ int main(int argc, char **argv)
                 u32 copy_dest = inst.args[0];
                 u32 copy_src = inst.args[1];
                 log_info(logger, "Ejecutando COPY *%d = *%d", copy_dest, copy_src);
-                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_dest, 1, fetched_val);
+                u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_dest, 1, fetched_val, pid);
                 assert_and_log(fetched_val == value_written, "Valor escrito == valor retornado por memoria");
                 break;
             }
@@ -319,28 +302,31 @@ entrada_tlb *get_tlb_entry_to_replace()
     {
     case TLB_ALG_FIFO:
     {
-        entrada_tlb *first_in = tlb_fifo_list.prev;
-        log_info(logger, "L %p prev %p next %p",
-                 &tlb_fifo_list, tlb_fifo_list.prev, tlb_fifo_list.next);
-        assert_and_log(first_in != NULL && first_in != &tlb_fifo_list, "lista TLB FIFO no vacia si se necesita reemplazar");
-        tlb_fifo_list_remove(first_in);
-        first_in->page_digits = PAGE_DIGITS_UNUSED;
+        entrada_tlb *ret = tlb;
+        for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
+        {
+            // min requested timestamp = oldest insertion = FIFO
+            if (tlb_entry->requested_timestamp < ret->requested_timestamp)
+            {
+                ret = tlb_entry;
+            }
+        }
+        ret->page_digits = PAGE_DIGITS_UNUSED;
         log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
-                 (int)((((int)first_in) - ((int)tlb)) / sizeof(entrada_tlb)));
-        return first_in;
+                 (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
+        return ret;
     }
     case TLB_ALG_LRU:
     {
         entrada_tlb *ret = tlb;
         for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
         {
-            // min timestamp = oldest use = least recently used
+            // min use timestamp = oldest use = least recently used
             if (tlb_entry->use_timestamp < ret->use_timestamp)
             {
                 ret = tlb_entry;
             }
         }
-        tlb_fifo_list_remove(ret);
         ret->page_digits = PAGE_DIGITS_UNUSED;
         log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
                  (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
@@ -360,7 +346,7 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, ent
 
     for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
     {
-        if (tlb_entry->page_digits == page_digits && tlb_entry->page_lvl1 == page_lvl1)
+        if (tlb_entry->page_digits == page_digits)
         {
             log_info(logger, "TLB HIT logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d marco %d",
                      log_addr, page_lvl1, tlb_entry->page_digits, page_lvl1_idx, page_lvl2_idx, tlb_entry->marco);
@@ -396,19 +382,17 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, ent
              (int)((((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb)), phys_addr_marco);
     entry_to_replace->marco = phys_addr_marco;
     entry_to_replace->page_digits = page_digits;
-    entry_to_replace->page_lvl1 = page_lvl1;
-    entry_to_replace->page_lvl2 = page_lvl2_num;
-    entry_to_replace->page_offset = page_lvl2_idx;
     entry_to_replace->use_timestamp = timestamp();
-    tlb_fifo_list_add(entry_to_replace);
+    entry_to_replace->requested_timestamp = entry_to_replace->use_timestamp;
+
     *out_tlb = entry_to_replace;
 
     return phys_addr_marco + offset_into_frame;
 }
 
-u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val)
+u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val, u32 pid)
 {
     entrada_tlb *out_tlb = NULL;
     u32 phys_addr = translate_addr(addr, pag_lvl1, mem_sock, buf, &out_tlb);
-    return send_mem_readwrite(mem_sock, buf, phys_addr, is_write, val, out_tlb->page_lvl2, out_tlb->page_offset);
+    return send_mem_readwrite(mem_sock, buf, phys_addr, is_write, val, pid);
 }

@@ -174,9 +174,8 @@ enum codigo_mensaje
     // CPU -> MEMORIA
     // is_write == 0 : write_val se ignora y es un read
     // is_write != 0 : write_val se escribe en addr. OUT tiene write_val
-    // page_offset y campo page_lvl2_num solo se envia para que la memoria marque el bit de uso/modificado
     //
-    // IN: [ addr(u32) is_write(u32) write_val(u32) page_lvl2_num(u32) page_offset(u32) ]
+    // IN: [ addr(u32) is_write(u32) write_val(u32) pid(u32) ]
     //
     // OUT: [ read(u32) ]
     MEMORIA_READWRITE,
@@ -244,7 +243,7 @@ t_msgheader recv_msg(int sock, t_buflen *buf);
 u32 send_nuevo_proceso(int sockfd, t_buflen *buf, u32 inst_count, inst_t *insts, u32 tamanio);
 void send_handshake_cpu_memoria(int sockfd, t_buflen *buf, u32 *out_cant_entradas_x_pagina, u32 *out_tam_pagina);
 // Devuelve valor leido o escrito
-u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 val, u32 page_lvl2_num, u32 page_offset);
+u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 val, u32 pid);
 // Devuelve el valor leido (num pagina 2do nivel o direccion de memoria del marco)
 // Luego de la llamada, *count_invals tiene la cantidad de marcos invalidados
 // y si es mayor a 0, *marcos tiene un puntero a un array con los marcos
