@@ -28,7 +28,7 @@
             ]
         },
         {
-            "name": "Test CPU",
+            "name": "Test MEMORIA",
             "type": "cppdbg",
             "request": "launch",
             "preLaunchTask": "Make",

@@ -278,9 +278,9 @@ void *connection_handler_thread(void *_sock)
                     {
                         if (entry_lvl2->flag_presencia != 0)
                         {
-                            log_info(logger, "TODO: Escribir en swap nro de pagina lvl2 %d entrada %d",
-                                     num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)));
-                            int marco = entry_lvl2->val;
+                            u32 marco = entry_lvl2->val;
+                            log_info(logger, "Escribiendo por SUSPEND en swap nro de pagina lvl2 %d entrada %d marco %d pid %d",
+                                     num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)), (int)marco, pid);
                             assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                             int offset =
                                 pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);

@@ -4,7 +4,7 @@
         {
             "label": "Make",
             "type": "shell",
-            "command": "make clean && make cpu",
+            "command": "cd .. && make clean && make cpu",
             "problemMatcher": [
                 "$gcc"
             ],
@@ -14,17 +14,9 @@
             }
         },
         {
-            "label": "CPU Normal",
-            "type": "shell",
-            "command": "./exec",
-            "problemMatcher": [
-                "$gcc"
-            ]
-        },
-        {
             "label": "CPU Valgrind",
             "type": "shell",
-            "command": "./vexec",
+            "command": "../vexec cpu",
             "problemMatcher": [
                 "$gcc"
             ]
