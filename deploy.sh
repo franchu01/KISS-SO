@@ -15,4 +15,11 @@ echo -e "\n\nInstalling CUnit libraries...\n\n"
 sudo apt-get install -y libcunit1 libcunit1-doc libcunit1-dev
 echo -e "\n\nBuilding projects...\n\n"
 make all
+echo -e "\n\nCreando directorios...\n\n"
+mkdir ../swap
+mkdir ../logs
+mkdir ~/logs
+mkdir ~/swap
+mkdir ./logs
+mkdir ./swap
 echo -e "\n\nDeploy done!\n\n"
