@@ -330,9 +330,9 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
             if (p->state == PROC_STATE_SUSPENDED_RDY)
                 send_mem_process_unsuspended(mem_sock, &buf, p->pid, p->pag_1er_niv);
             else
-            { // NEW
-              //  Se hace cuando se crea, no es necesario
-              // send_mem_new_process(mem_sock, &buf, p->pid);
+            {   // NEW
+                //  Se hace cuando se crea, no es necesario
+                // send_mem_new_process(mem_sock, &buf, p->pid);
             }
         }
         else

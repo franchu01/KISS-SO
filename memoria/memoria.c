@@ -35,8 +35,7 @@ typedef struct page_table_entry
     u8 flag_uso;
     // != 0 si se escribio
     u8 flag_modif;
-    union
-    {
+    union {
         struct page1_table_entry p1;
         struct page2_table_entry p2;
         u32 val;
@@ -124,7 +123,7 @@ int main(int argc, char **argv)
 
     tam_mem = config_get_int_value(conf, "TAM_MEMORIA");
     tam_pag = config_get_int_value(conf, "TAM_PAGINA");
-    pags_x_tabl = config_get_int_value(conf, "PAGINAS_POR_TABLA");
+    pags_x_tabl = config_get_int_value(conf, "ENTRADAS_POR_TABLA");
     marcos_x_proc = config_get_int_value(conf, "MARCOS_POR_PROCESO");
 
     retardo_memoria = config_get_int_value(conf, "RETARDO_MEMORIA");

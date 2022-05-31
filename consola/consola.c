@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 
     logger = log_create(path_logger, "consola", true, LOG_LEVEL_INFO);
     if (!logger)
-    {   
+    {
         printf("No se pudo abrir el archivo de log %s\n", path_logger);
         return -1;
     }
@@ -153,6 +153,12 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
         else if (starts_with(line_start, "EXIT"))
         {
             inst.code = INST_EXIT;
+        }
+        else if (starts_with(line_start, "#"))
+        { // extension del enunciado: COMENTARIO
+            line_start = line_end + 1;
+            line_end = line_start;
+            continue;
         }
         else if (*line_end == '\0' && finished)
         {
