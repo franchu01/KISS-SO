@@ -55,6 +55,8 @@ typedef struct pcb
 {
     u32 pid;
     enum estado_proceso state;
+    // Acumulador de la rafaga actual, para cuando se interrumpe/desaloja un proceso
+    u32 rafaga_actual;
     u32 estimacion_rafaga;
     u32 pc;
     u32 tamanio;
@@ -278,6 +280,7 @@ int main(int argc, char **argv)
         pcb_t *pcb = malloc(sizeof(pcb_t));
         *pcb = (pcb_t){0};
         pcb->pc = 0;
+        pcb->rafaga_actual = 0;
         pcb->pid = new_pid;
         pcb->tamanio = tamanio;
         pcb->inst_count = inst_count;
@@ -445,13 +448,16 @@ void *dispatcher_thread(void *_p)
         else
         {
             // TODO: Verificar calculo estimacion
-            double ultima_estimacion = p->estimacion_rafaga;
-            double ultima_rafaga_real = res.rafaga;
-            p->estimacion_rafaga = (u32)floor(ultima_estimacion * (1.0 - alfa) + alfa * ultima_rafaga_real);
-            log_info(logger, "p->estimacion_rafaga %d pultima_estimacionid %f ultima_rafaga_real %f alfa %f", p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
+            p->rafaga_actual += res.rafaga;
             p->pc = res.pc;
             if (res.bloqueo_io != 0)
             { // BLOQUEADO
+                double ultima_estimacion = p->estimacion_rafaga;
+                double ultima_rafaga_real = res.rafaga;
+                p->estimacion_rafaga = (u32)floor(ultima_estimacion * (1.0 - alfa) + alfa * ultima_rafaga_real);
+                log_info(logger, "actualizando pid %d estimacion_rafaga: %d ultima_estimacion %f ultima_rafaga_real %f alfa %f", p->pid, p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
+                p->rafaga_actual = 0;
+
                 p->block_ms = res.bloqueo_io;
                 set_proc_state(p, PROC_STATE_BLOCKED);
                 assert(sem_post(&io_device_sema) == 0);
