@@ -330,7 +330,7 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
             if (p->state == PROC_STATE_SUSPENDED_RDY)
                 send_mem_process_unsuspended(mem_sock, &buf, p->pid, p->pag_1er_niv);
             else
-            {   // NEW
+            { // NEW
                 //  Se hace cuando se crea, no es necesario
                 // send_mem_new_process(mem_sock, &buf, p->pid);
             }
@@ -448,20 +448,20 @@ void *dispatcher_thread(void *_p)
             double ultima_estimacion = p->estimacion_rafaga;
             double ultima_rafaga_real = res.rafaga;
             p->estimacion_rafaga = (u32)floor(ultima_estimacion * (1.0 - alfa) + alfa * ultima_rafaga_real);
-            log_info(logger, "p->estimacion_rafaga %d pultima_estimacionid %f ultima_rafaga_realt %f alfa %f", p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
+            log_info(logger, "p->estimacion_rafaga %d pultima_estimacionid %f ultima_rafaga_real %f alfa %f", p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
             p->pc = res.pc;
             if (res.bloqueo_io != 0)
             { // BLOQUEADO
                 p->block_ms = res.bloqueo_io;
                 set_proc_state(p, PROC_STATE_BLOCKED);
                 assert(sem_post(&io_device_sema) == 0);
+                short_term_scheduling();
             }
             else
             { // Vuelta a RDY (interrupt)
                 set_proc_state(p, PROC_STATE_RDY);
             }
         }
-        short_term_scheduling();
         pthread_mutex_unlock(&scheduling_mutex);
     }
 

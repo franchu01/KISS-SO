@@ -237,7 +237,7 @@ void *connection_handler_thread(void *_sock)
             // Create file
             assert_and_log(pid < MAX_PROCS, "pid menor a MAX_PROCS");
             PID_TO_STACK_STR_PATH(pid, stackbuf);
-            int swap_file_fd = openat(path_dir_fd, stackbuf, O_CREAT | O_RDWR, S_IXUSR | S_IRWXG);
+            int swap_file_fd = openat(path_dir_fd, stackbuf, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
             if (swap_file_fd == -1)
             {
                 log_error(logger, "Error openat creando archivo de swap pid %d dir_fd %d strerror: %s", pid, path_dir_fd, strerror(errno));
