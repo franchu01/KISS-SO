@@ -33,6 +33,7 @@
 #include <semaphore.h>
 
 #define thread_local __thread
+typedef int64_t i64;
 typedef uint32_t u32;
 typedef uint8_t u8;
 

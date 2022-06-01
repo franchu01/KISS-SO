@@ -66,8 +66,10 @@ typedef struct pcb
 
     // Usado solo para mandar este dato al hilo de IO
     u32 block_ms;
+    // timestamp de cuando se paso a bloqueado
+    i64 timestamp_inicio_block;
 
-    // socket para de
+    // socket para avisar a la consola cuando finaliza el proceso
     int consola_sock;
 
     // Punteros para cuando el pcb esta en una lista
@@ -459,6 +461,7 @@ void *dispatcher_thread(void *_p)
                 p->rafaga_actual = 0;
 
                 p->block_ms = res.bloqueo_io;
+                p->timestamp_inicio_block = timestamp();
                 set_proc_state(p, PROC_STATE_BLOCKED);
                 assert(sem_post(&io_device_sema) == 0);
                 short_term_scheduling();
@@ -491,20 +494,27 @@ void *io_device_thread(void *_unused)
             continue;
         }
         u32 wait_ms = pcb->block_ms;
+        i64 timestamp_inicio_block = pcb->timestamp_inicio_block;
+        u32 tiempo_en_espera_antes_de_io = ((timestamp() - timestamp_inicio_block) / 1000);
+        u32 tiempo_hasta_suspendido = tiempo_en_espera_antes_de_io > tiempo_maximo_bloqueado ? 0 : tiempo_maximo_bloqueado - tiempo_en_espera_antes_de_io;
 
         assert(pcb->state == PROC_STATE_BLOCKED);
 
-        if (wait_ms > tiempo_maximo_bloqueado)
+        if (wait_ms > tiempo_hasta_suspendido)
         {
-            u32 remaining_wait_ms_after_suspend = wait_ms - tiempo_maximo_bloqueado;
-            log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando (Va a suspenderse)", pcb->pid, wait_ms);
-            pthread_mutex_unlock(&scheduling_mutex);
+            u32 remaining_wait_ms_after_suspend = wait_ms - tiempo_hasta_suspendido;
+            if (tiempo_hasta_suspendido > 0)
+            {
+                log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando (Va a suspenderse en %d)", pcb->pid, wait_ms, tiempo_hasta_suspendido);
+                pthread_mutex_unlock(&scheduling_mutex);
 
-            usleep(1000 * tiempo_maximo_bloqueado);
+                usleep(1000 * tiempo_hasta_suspendido);
 
-            pthread_mutex_lock(&scheduling_mutex);
+                pthread_mutex_lock(&scheduling_mutex);
+            }
+
             log_info(logger, "Pasando pid %d a SUSPENDED_BLOCKED luego de %d ms de bloqueo, quedan %d ms, bloqueando",
-                     pcb->pid, tiempo_maximo_bloqueado, wait_ms);
+                     pcb->pid, tiempo_hasta_suspendido, remaining_wait_ms_after_suspend);
             set_proc_state(pcb, PROC_STATE_SUSPENDED_BLOCKED);
             mid_term_scheduling();
             pthread_mutex_unlock(&scheduling_mutex);
