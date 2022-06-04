@@ -448,5 +448,3 @@ void *connection_handler_thread(void *_sock)
     free(network_buf.buf);
     return 0;
 }
-
-// Pruebo integracion con git por problemas con repositorio
