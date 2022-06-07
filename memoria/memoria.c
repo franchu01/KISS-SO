@@ -8,6 +8,7 @@ enum alg_reemplazo
     ALG_CLOCK_M,
     ALG_CLOCK
 };
+
 enum alg_reemplazo alg;
 int tam_mem;
 int tam_pag;
@@ -66,7 +67,7 @@ typedef struct proc_info
     int proc_swap_file_fd;
     // 1 if suspended; 0 otherwise
     u32 is_suspended;
-    // TODO: FIFO pagetable intrusive list?
+    // TODO: FIFO pagetable intrusive list? - Estructura statica (VECTOR?) Que guarde las paginas que estan en memoria
 } proc_info;
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
@@ -147,7 +148,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    path_dir_fd = open(path_swap, 0);
+    path_dir_fd = open(path_swap, 0); // Inicializar Swap?
     if (path_dir_fd == -1)
     {
         log_error(logger, "Error abriendo directorio de swap \"%s\" strerror: %s", path_swap, strerror(errno));
@@ -251,6 +252,7 @@ void *connection_handler_thread(void *_sock)
             proc_info->nro_pag_lvl1 = nro_pagina_1er_nivel;
             proc_info->is_suspended = 0;
             proc_info->proc_swap_file_fd = swap_file_fd;
+            // TODO: Insertar las paginas del proceso que estan en memoria al vector estatico
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = nro_pagina_1er_nivel;
@@ -264,7 +266,7 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido PROCESS_SUSPENDED pid %d", pid);
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 1;
-            int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+            int swap_file_fd = procs_info[pid].proc_swap_file_fd; 
             struct page_table_entry *entry_lvl1 = page_tables[nro_pag1].entries;
             int nro_pag = 0;
             for (struct page_table_entry *end = entry_lvl1 + pags_x_tabl; end != entry_lvl1; entry_lvl1++)
@@ -280,6 +282,7 @@ void *connection_handler_thread(void *_sock)
                             u32 marco = entry_lvl2->val;
                             log_info(logger, "Escribiendo por SUSPEND en swap nro de pagina lvl2 %d entrada %d marco %d pid %d",
                                      num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)), (int)marco, pid);
+                            // Dejar el vector de proc_info en 0, ya que ninguna pagina del proceso esta en memoria
                             assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                             int offset =
                                 pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
@@ -301,6 +304,7 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
             log_info(logger, "Recibido PROCESS_UNSUSPENDED pid %d", pid);
+            // TODO: Volver a meter en el vector las paginas del proceso que retornan a memoria.
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 0;
             pthread_mutex_unlock(&m);
@@ -316,7 +320,7 @@ void *connection_handler_thread(void *_sock)
             int swap_file_fd = procs_info[pid].proc_swap_file_fd;
             PID_TO_STACK_STR_PATH(pid, stackbuf);
             assert_and_log(close(swap_file_fd) == 0, "close swap file fd");
-            assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file");
+            assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file"); 
 
             page_tables[nro_pag1].state = PT_STATE_UNUSED;
             struct page_table_entry *entry = page_tables[nro_pag1].entries;
@@ -369,6 +373,7 @@ void *connection_handler_thread(void *_sock)
                     }
                 }
             }
+            
             assert_and_log(addr_pagetable_entry != NULL, "No se encontro el marco de la direccion en la tabla de paginas del pid");
             if (is_write == 0)
             { // READ
