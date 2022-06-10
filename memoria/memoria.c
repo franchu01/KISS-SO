@@ -67,10 +67,21 @@ typedef struct proc_info
     int proc_swap_file_fd;
     // 1 if suspended; 0 otherwise
     u32 is_suspended;
-    // TODO: FIFO pagetable intrusive list? - Estructura statica (VECTOR?) Que guarde las paginas que estan en memoria
+    // TODO: FIFO pagetable intrusive list?
+    u32 pags_en_memoria[256]; // vector lleva en cuenta las paginas en memoria
 } proc_info;
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
+
+void limpiar_pags_en_memoria(int nro_de_proc){
+    struct *p = malloc(sizeof(procs_info));
+    *p = procs_info;
+    for(int i=0,i<256,i++){
+        p[nro_de_proc]->pags_en_memoria[i]=(-1); // -1 Representa que no hay paginas
+    }
+    free(p);
+}
+
 
 u32 get_unused_pagetable()
 {
@@ -252,7 +263,7 @@ void *connection_handler_thread(void *_sock)
             proc_info->nro_pag_lvl1 = nro_pagina_1er_nivel;
             proc_info->is_suspended = 0;
             proc_info->proc_swap_file_fd = swap_file_fd;
-            // TODO: Insertar las paginas del proceso que estan en memoria al vector estatico
+            limpiar_pags_en_memoria(pid); // nuevo proceso no tiene pags en memoria
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = nro_pagina_1er_nivel;
@@ -282,7 +293,7 @@ void *connection_handler_thread(void *_sock)
                             u32 marco = entry_lvl2->val;
                             log_info(logger, "Escribiendo por SUSPEND en swap nro de pagina lvl2 %d entrada %d marco %d pid %d",
                                      num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)), (int)marco, pid);
-                            // Dejar el vector de proc_info en 0, ya que ninguna pagina del proceso esta en memoria
+                            limpiar_pags_en_memoria(pid); // proceso suspendido no tiene pags en memoria
                             assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                             int offset =
                                 pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
@@ -304,7 +315,7 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
             log_info(logger, "Recibido PROCESS_UNSUSPENDED pid %d", pid);
-            // TODO: Volver a meter en el vector las paginas del proceso que retornan a memoria.
+
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 0;
             pthread_mutex_unlock(&m);
