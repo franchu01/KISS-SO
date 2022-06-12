@@ -59,6 +59,7 @@ page_table *page_tables = NULL;
 u32 page_tables_elem_count = 0;
 u32 *memoria_ram = NULL;
 int path_dir_fd;
+#define MAX_PAGS_x_PROC (256)
 typedef struct proc_info
 {
     u32 pid;
@@ -68,19 +69,23 @@ typedef struct proc_info
     // 1 if suspended; 0 otherwise
     u32 is_suspended;
     // TODO: FIFO pagetable intrusive list?
-    u32 pags_en_memoria[256]; // vector lleva en cuenta las paginas en memoria
+    u32 pags_en_memoria[MAX_PAGS_x_PROC]; // vector lleva en cuenta las paginas en memoria
 } proc_info;
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
 
+/* Comento la funcion porque rompe
+
 void limpiar_pags_en_memoria(int nro_de_proc){
-    struct *p = malloc(sizeof(procs_info));
+    struct procs_info *p = malloc(sizeof(procs_info));
     *p = procs_info;
-    for(int i=0,i<256,i++){
+    for(int i=0;i < MAX_PAGS_x_PROC;i++){
         p[nro_de_proc]->pags_en_memoria[i]=(-1); // -1 Representa que no hay paginas
     }
     free(p);
 }
+
+*/
 
 
 u32 get_unused_pagetable()
@@ -109,6 +114,61 @@ u32 get_unused_pagetable()
     page_tables[old_count].state = PT_STATE_LVL2;
     return old_count;
 }
+
+/* 
+
+    ESTAS 2 FUNCIONES ESTAN COMENTADAS PORQUE ROMPEN
+    
+struct page_table_entry* reemplazar_pagina_clock( Capaz recibo por parametro un proceso? ){ 
+    struct page_table_entry* pagina_a_reemplazar = NULL;
+    // TODO: Aca capaz un semaforo mutex
+    while(pagina_a_reemplazar == NULL){
+        struct pagina_a_reemplazar* aux_page = list_get( TODO: Aca vendria a meter una lsita de frames (de cada proceso) , puntero_clock);
+        if(aux_page->flag_uso == 0){
+            pagina_a_reemplazar = aux_page;
+        }
+        else{
+            aux_page -> flag_uso = 0;
+        }
+        if(puntero_clock+1 == Cantidad maxima de paginas en memoria (Siempre de un mismo proceso porque es scope local) ){
+            puntero_clock = 0; // Reinicio el puntero para que arranque del principio
+        }
+        else{
+            puntero_clock++;
+        }
+    }
+    // TODO: Aca cierro el semaforo
+    return pagina_a_reemplazar;
+}
+*/
+/*
+struct page_table_entry* reemplazar_pagina_clock_m( Capaz recibo por parametro un proceso? ){ 
+    struct page_table_entry* pagina_a_reemplazar = NULL;
+    // TODO: Aca capaz un semaforo mutex
+    while(pagina_a_reemplazar == NULL){
+        struct pagina_a_reemplazar* aux_page = list_get( TODO: Aca vendria a meter una lsita de frames (de cada proceso) , puntero_clock);
+        if(aux_page->flag_uso == 0 && aux_page->modif == 0){
+            pagina_a_reemplazar = aux_page;
+        }
+        else if(aux_page->flag_uso == 0){
+            pagina_a_reemplazar = aux_page;
+        }
+        else{
+            aux_page -> flag_uso = 0;
+        }
+        if(puntero_clock+1 == /*Cantidad maxima de paginas en memoria (Siempre de un mismo proceso porque es scope local) ){
+            puntero_clock = 0; // Reinicio el puntero para que arranque del principio
+        }
+        else{
+            puntero_clock++;
+        }
+    }
+    // TODO: Aca cierro el semaforo
+    return pagina_a_reemplazar;
+}
+
+*/
+
 
 int main(int argc, char **argv)
 {
