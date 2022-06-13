@@ -88,7 +88,6 @@ void limpiar_pags_en_memoria(int nro_de_proc){
 
 */
 
-
 u32 get_unused_pagetable()
 {
     for (page_table *it = page_tables, *end = page_tables + page_tables_elem_count; it != end; it++)
@@ -182,22 +181,18 @@ struct page_table_entry* reemplazar_pagina_clock_m( int pid ){
 void reemplazar_pagina_por (struct page_table_entry* nueva_pagina){
     // Aca capaz un semaforo
     struct page_table_entry* pagina_a_reemplazar = NULL;
-    if(strcmp(alg,"CLOCK") == 0){
+    assert_and_log(alg == ALG_CLOCK_M || alg == ALG_CLOCK, "alg reemplazo pags es clock o clock-M");
+    if(alg == ALG_CLOCK_M){
         pagina_a_reemplazar = reemplazar_pagina_clock(pid);
     }
-    else if(strcmp(alg,"CLOCK-M") == 0){
+    else if(alg == ALG_CLOCK){
         pagina_a_reemplazar = reemplazar_pagina_clock_m(pid);
-    }
-    else{
-        log_error(logger, "Recibido algoritmo desconicido (%d)", alg);
-            log_destroy(logger);
     }
     int numero_de_frame = pagina_a_reemplazar -> p2 -> frame_number
     // Aca vendria a ser el SWAPEO de paginas
 }
 
 */
-
 
 int main(int argc, char **argv)
 {
@@ -366,7 +361,7 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido PROCESS_SUSPENDED pid %d", pid);
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 1;
-            int swap_file_fd = procs_info[pid].proc_swap_file_fd; 
+            int swap_file_fd = procs_info[pid].proc_swap_file_fd;
             struct page_table_entry *entry_lvl1 = page_tables[nro_pag1].entries;
             int nro_pag = 0;
             for (struct page_table_entry *end = entry_lvl1 + pags_x_tabl; end != entry_lvl1; entry_lvl1++)
@@ -420,7 +415,7 @@ void *connection_handler_thread(void *_sock)
             int swap_file_fd = procs_info[pid].proc_swap_file_fd;
             PID_TO_STACK_STR_PATH(pid, stackbuf);
             assert_and_log(close(swap_file_fd) == 0, "close swap file fd");
-            assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file"); 
+            assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file");
 
             page_tables[nro_pag1].state = PT_STATE_UNUSED;
             struct page_table_entry *entry = page_tables[nro_pag1].entries;
@@ -473,7 +468,7 @@ void *connection_handler_thread(void *_sock)
                     }
                 }
             }
-            
+
             assert_and_log(addr_pagetable_entry != NULL, "No se encontro el marco de la direccion en la tabla de paginas del pid");
             if (is_write == 0)
             { // READ
