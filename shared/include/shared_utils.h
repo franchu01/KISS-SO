@@ -184,7 +184,7 @@ enum codigo_mensaje
     // Devuelve los marcos invalidados para quitar de la TLB
     //
     //
-    // IN: [ page_num(u32) page_offset(u32) ]
+    // IN: [ page_num(u32) page_offset(u32) logical_address(u32) pid(u32) ]
     //
     // OUT: [ read(u32) num_invalidations(u32) N*marco_invalidado(u32) ]
     MEMORIA_PAGEREAD,
@@ -249,7 +249,7 @@ u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 va
 // Luego de la llamada, *count_invals tiene la cantidad de marcos invalidados
 // y si es mayor a 0, *marcos tiene un puntero a un array con los marcos
 // NOTA: *marcos termina apuntando al buffer `buf, NO llamar a free() con ese puntero
-u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset, u32 *count_invals, u32 **marcos);
+u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset, u32 log_addr, u32 pid, u32 *count_invals, u32 **marcos);
 // Devuelve nro pagina 1er nivel
 u32 send_mem_new_process(int sockfd, t_buflen *buf, u32 pid, u32 tam_proc);
 void send_mem_process_suspended(int sockfd, t_buflen *buf, u32 pid, u32 nro_pagina_1er_nivel);

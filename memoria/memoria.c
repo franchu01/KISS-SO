@@ -60,7 +60,7 @@ page_table *page_tables = NULL;
 u32 page_tables_elem_count = 0;
 u32 *memoria_ram = NULL;
 int path_dir_fd;
-#define MAX_PAGS_x_PROC (256)
+#define MAX_PAGS_X_PROC (256)
 typedef struct proc_info
 {
     u32 pid;
@@ -75,7 +75,7 @@ typedef struct proc_info
     // del algoritmo de reemplazo
     u32 idx_last_clock_ptr;
     // Array con nros de pagina ordenados como FIFO para alg clock
-    u32 pags_en_memoria[MAX_PAGS_x_PROC];
+    u32 pags_en_memoria[MAX_PAGS_X_PROC];
 } proc_info;
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
@@ -107,10 +107,41 @@ u32 get_unused_pagetable()
     return old_count;
 }
 
-void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 direc_logica, int pid)
+void add_pag_en_memoria_a_proc(u32 logical_addr, u32 pid)
 {
+    assert_and_log(procs_info[pid].num_pags_en_memoria < MAX_PAGS_X_PROC,
+                   "No se puede quitar una pagina en memoria de un proc si no tiene ninguna");
+
+    // Si habia 1, num=1 y nuevo indice =1 (Empiezan en 0)
+    int nuevo_idx = procs_info[pid].num_pags_en_memoria;
+    procs_info[pid].pags_en_memoria[nuevo_idx] = logical_addr;
+    procs_info[pid].num_pags_en_memoria++;
+}
+void remove_pag_en_memoria_de_proc(int idx, u32 pid)
+{
+    assert_and_log(procs_info[pid].num_pags_en_memoria > 0,
+                   "No se puede quitar una pagina en memoria de un proc si no tiene ninguna");
+
+    int cant_pags_a_la_derecha = procs_info[pid].num_pags_en_memoria - idx - 1;
+    if (cant_pags_a_la_derecha > 0)
+    {
+        // Ej: [A, B, C, D] y quitamos idx=1 osea B. cant = 4
+        // a la derecha: 4-1-1 = 2 (C y D)
+        // Entonces copiamos C, D encima de B, C y queda [A, C, D, D]
+        // Y finalmente reducimos num_pags_en_memoria a 3 y queda [A, C, D]
+        void *dest = procs_info[pid].pags_en_memoria + idx;
+        void *src = dest + 1;
+        memmove(dest, src, cant_pags_a_la_derecha * sizeof(u32));
+    }
+    procs_info[pid].num_pags_en_memoria--;
+}
+
+void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 direc_logica, u32 pid)
+{
+    assert_and_log(pagina_a_reemplazar->flag_presencia != 0,
+                   "No se puede swaper a disco una pagina que no este presente");
     int swap_file_fd = procs_info[pid].proc_swap_file_fd;
-    int marco = pagina_a_reemplazar->p2.frame_number;
+    u32 marco = pagina_a_reemplazar->p2.frame_number;
     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, direc_logica);
     pagina_a_reemplazar->flag_presencia = 0;
 }
@@ -125,11 +156,11 @@ u32 reemplazar_pagina_clock(int pid)
 
         while (true)
         {
-            int indice_pag = procs_info[pid].pags_en_memoria[idx_current_iteration] / tam_pag;
-            int indice_pag_lvl1 = indice_pag % pags_x_tabl;
-            int indice_pag_lvl2 = indice_pag / pags_x_tabl;
+            u32 indice_pag = procs_info[pid].pags_en_memoria[idx_current_iteration] / tam_pag;
+            u32 indice_pag_lvl1 = indice_pag % pags_x_tabl;
+            u32 indice_pag_lvl2 = indice_pag / pags_x_tabl;
 
-            int index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
+            u32 index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
 
             struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
             int bit_de_uso = entrada->flag_uso;
@@ -157,14 +188,7 @@ u32 reemplazar_pagina_clock(int pid)
         if (pagina_a_reemplazar = !NULL)
         {
             procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
-            int cant_pags_a_la_derecha = procs_info[pid].num_pags_en_memoria - idx_current_iteration - 1;
-            if (cant_pags_a_la_derecha > 0)
-            {
-                void *dest = procs_info[pid].pags_en_memoria + idx_current_iteration;
-                void *src = dest + 1;
-                memmove(dest, src, cant_pags_a_la_derecha * sizeof(u32));
-            }
-            procs_info[pid].num_pags_en_memoria--;
+            remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
 
             swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
             return pagina_a_reemplazar->p2.frame_number;
@@ -173,10 +197,10 @@ u32 reemplazar_pagina_clock(int pid)
 
     while (true)
     {
-        int indice_pag = procs_info[pid].pags_en_memoria[idx_current_iteration] / tam_pag;
-        int indice_pag_lvl1 = indice_pag % pags_x_tabl;
-        int indice_pag_lvl2 = indice_pag / pags_x_tabl;
-        int index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
+        u32 indice_pag = procs_info[pid].pags_en_memoria[idx_current_iteration] / tam_pag;
+        u32 indice_pag_lvl1 = indice_pag % pags_x_tabl;
+        u32 indice_pag_lvl2 = indice_pag / pags_x_tabl;
+        u32 index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
         int pag_victima;
 
         struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
@@ -211,14 +235,7 @@ u32 reemplazar_pagina_clock(int pid)
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
     procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
-    int cant_pags_a_la_derecha = procs_info[pid].num_pags_en_memoria - idx_current_iteration - 1;
-    if (cant_pags_a_la_derecha > 0)
-    {
-        void *dest = procs_info[pid].pags_en_memoria + idx_current_iteration;
-        void *src = dest + 1;
-        memmove(dest, src, cant_pags_a_la_derecha * sizeof(u32));
-    }
-    procs_info[pid].num_pags_en_memoria--;
+    remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
 
     swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
     return pagina_a_reemplazar->p2.frame_number;
@@ -391,7 +408,7 @@ void *connection_handler_thread(void *_sock)
             proc_info->proc_swap_file_fd = swap_file_fd;
             proc_info->num_pags_en_memoria = 0;
             proc_info->idx_last_clock_ptr = 0;
-            memset(proc_info->pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_x_PROC);
+            memset(proc_info->pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_X_PROC);
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = pagina_1er_nivel_idxptr;
@@ -436,7 +453,7 @@ void *connection_handler_thread(void *_sock)
             }
             procs_info[pid].num_pags_en_memoria = 0;
             procs_info[pid].idx_last_clock_ptr = 0;
-            memset(procs_info[pid].pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_x_PROC);
+            memset(procs_info[pid].pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_X_PROC);
             pthread_mutex_unlock(&m);
             break;
         }
@@ -539,35 +556,40 @@ void *connection_handler_thread(void *_sock)
         {
             usleep(retardo_memoria * 1000);
 
-            u32 page_num = read_u32(network_buf.buf);
+            u32 pagetable_idxptr = read_u32(network_buf.buf);
             u32 page_offset = read_u32(network_buf.buf + 4);
-            log_info(logger, "Recibido PAGEREAD page_num %d offset %d", page_num, page_offset);
+            u32 logical_addr = read_u32(network_buf.buf + 8);
+            u32 pid = read_u32(network_buf.buf + 12);
+            log_info(logger, "Recibido PAGEREAD pagetable_idxptr %d offset %d", pagetable_idxptr, page_offset);
 
             pthread_mutex_lock(&m);
-            assert_and_log(page_tables[page_num].state != PT_STATE_UNUSED,
+            assert_and_log(page_tables[pagetable_idxptr].state != PT_STATE_UNUSED,
                            "La tabla de paginas de la que se lee debe estar en uso");
 
-            struct page_table *p = &page_tables[page_num];
-            struct page_table_entry *e = &(p->entries[page_offset]);
+            struct page_table *t = &page_tables[pagetable_idxptr];
+            struct page_table_entry *e = &(t->entries[page_offset]);
             u32 offset_present = e->flag_presencia != 0;
-            log_info(logger, "presencia %d state %d", e->flag_presencia, p->state);
+            log_info(logger, "presencia %d state %d", e->flag_presencia, t->state);
             if (!offset_present)
             {
                 // PAGE FAULT
-                if (p->state == PT_STATE_LVL1)
+                if (t->state == PT_STATE_LVL1)
                 { // Pag 1er nivel, asignar pagina de 2do nivel
                     e->val = get_unused_pagetable();
                     e->flag_presencia = 1;
+                    // No es necesario agregar a proc.pags_en_memoria ya que es entrada de una tabla de 1er nivel
+                    // Osea una pagina de 2do nivel, que nunca swapeamos
                 }
-                else if (p->state == PT_STATE_LVL2)
+                else if (t->state == PT_STATE_LVL2)
                 { // Pag 2do nivel, asignar marco
                     // TODO: Asignar marco, invalidar de ser necesario
                     e->val = 0;
                     e->flag_presencia = 1;
+                    add_pag_en_memoria_a_proc(logical_addr, pid);
                 }
                 else
                 {
-                    assert(0);
+                    assert_and_log(0, "una pagina solo puede ser de lvl1 o lvl2");
                 }
             }
             u32 page_num_or_frame_num = e->val;

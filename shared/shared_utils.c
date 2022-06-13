@@ -381,12 +381,14 @@ u32 send_mem_readwrite(int sockfd, t_buflen *buf, u32 addr, u32 is_write, u32 va
     assert_and_log(recv_buffer(sockfd, buf->buf, sizeof(u32)) == 0, "error recv MEMORIA_READWRITE");
     return read_u32(buf->buf);
 }
-u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset, u32 *count_invals, u32 **marcos)
+u32 send_mem_page_read(int sockfd, t_buflen *buf, u32 num_page, u32 page_offset, u32 log_addr, u32 pid, u32 *count_invals, u32 **marcos)
 {
     t_writer ww = writer(MEMORIA_PAGEREAD, buf);
     t_writer *w = &ww;
     write_u32(w, num_page);
     write_u32(w, page_offset);
+    write_u32(w, log_addr);
+    write_u32(w, pid);
     finish_writing(w);
     assert_and_log(send_buffer(sockfd, buf->buf, w->written) == 0, "error send MEMORIA_PAGEREAD");
 

@@ -40,7 +40,7 @@ void retornar_dispatch(int sockfd, t_buflen *network_buf, u32 pid, u32 pc, u32 r
 
     send_buffer(sockfd, network_buf->buf, sizeof(u32) * 4);
 }
-u32 translate_addr(u32 log_addr, u32 page1, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb);
+u32 translate_addr(u32 log_addr, u32 page1, u32 pid, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb);
 
 int main(int argc, char **argv)
 {
@@ -336,7 +336,7 @@ entrada_tlb *get_tlb_entry_to_replace()
     assert_and_log(0, "algoritmo invalido en get_tlb_entry_to_replace");
     return NULL;
 }
-u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb)
+u32 translate_addr(u32 log_addr, u32 page_lvl1, u32 pid, int mem_sock, t_buflen *buf, entrada_tlb **out_tlb)
 {
     u32 page_digits = log_addr / tam_pag;
     u32 offset_into_frame = log_addr % tam_pag;
@@ -361,10 +361,10 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, ent
     u32 invalidation_count = 0;
     u32 *invalidations = NULL;
 
-    u32 page_lvl2_num = send_mem_page_read(mem_sock, buf, page_lvl1, page_lvl1_idx, &invalidation_count, &invalidations);
+    u32 page_lvl2_num = send_mem_page_read(mem_sock, buf, page_lvl1, page_lvl1_idx, page_digits * tam_pag, pid, &invalidation_count, &invalidations);
     assert_and_log(invalidation_count == 0, "Lectura de pagina de 1er nivel no invalida memoria");
 
-    u32 phys_addr_marco = send_mem_page_read(mem_sock, buf, page_lvl2_num, page_lvl2_idx, &invalidation_count, &invalidations);
+    u32 phys_addr_marco = send_mem_page_read(mem_sock, buf, page_lvl2_num, page_lvl2_idx, page_digits * tam_pag, pid, &invalidation_count, &invalidations);
 
     for (u32 *inv_end = invalidations + invalidation_count; invalidations != inv_end; invalidations++)
     {
@@ -393,6 +393,6 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, int mem_sock, t_buflen *buf, ent
 u32 perform_readwrite(t_buflen *buf, u32 pag_lvl1, u32 addr, u32 is_write, u32 val, u32 pid)
 {
     entrada_tlb *out_tlb = NULL;
-    u32 phys_addr = translate_addr(addr, pag_lvl1, mem_sock, buf, &out_tlb);
+    u32 phys_addr = translate_addr(addr, pag_lvl1, pid, mem_sock, buf, &out_tlb);
     return send_mem_readwrite(mem_sock, buf, phys_addr, is_write, val, pid);
 }
