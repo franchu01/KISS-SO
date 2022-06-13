@@ -107,84 +107,90 @@ u32 get_unused_pagetable()
     return old_count;
 }
 
-/*
-
-int cant_pags_x_proc(int nro_de_proc){
-    int k=0;
-    struct proceso = procs_info[nro_de_proc];
-    while(proceso.pags_en_memoria[k] != (-1) ){
-        k++;
-    }
-    return k;
+void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 direc_logica, int pid){
+    int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+    int marco = pagina_a_reemplazar->p2.frame_number;
+    pwrite(swap_file_fd, memoria_ram + marco, tam_pag, direc_logica);
+    pagina_a_reemplazar->flag_presencia = 0;
 }
 
-void lista_de_marcos_x_pagina
+u32 reemplazar_pagina_clock(int pid)
+{
+    struct page_table_entry *pagina_a_reemplazar = NULL;
+    int var = procs_info[pid].idx_last_clock_ptr;
 
-struct page_table_entry* reemplazar_pagina_clock(int pid){ 
-    struct page_table_entry* pagina_a_reemplazar = NULL;
-    // TODO: Aca capaz un semaforo mutex
-    while(pagina_a_reemplazar == NULL){
-        struct pagina_a_reemplazar* aux_page = list_get(  , puntero_clock); //TODO: en lista get tendria q poner una lista de pags por proceso
-        if(aux_page->flag_uso == 0){
-            pagina_a_reemplazar = aux_page;
+    if (alg == ALG_CLOCK_M)
+    {
+
+        while (true)
+        {
+            int indice_pag = procs_info[pid].pags_en_memoria[var] / tam_pag;
+            int indice_pag_lvl1 = indice_pag % pags_x_tabl;
+            int indice_pag_lvl2 = indice_pag / pags_x_tabl;
+
+            int index_pag_lvl2 = page_tables[procs_info[pid].nro_pag_lvl1].entries[indice_pag_lvl1].val;
+
+            struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
+            int bit_de_uso = entrada->flag_uso;
+            int flag_de_modificado = entrada->flag_modif;
+
+            if (bit_de_uso == 0 && flag_de_modificado == 0)
+            {   
+                pagina_a_reemplazar = entrada;
+                break;
+            }
+
+            entrada->flag_uso = 0;
+
+            var = (var + 1) % procs_info[pid].num_pags_en_memoria;
+            if (var == procs_info[pid].idx_last_clock_ptr)
+            {
+                break;
+            }
+
         }
-        else{
-            aux_page -> flag_uso = 0;
-        }
-        int pags_x_proc = cant_pags_x_proc(pid)
-        if(puntero_clock+1 ==  pags_x_proc){
-            puntero_clock = 0; // Reinicio el puntero para que arranque del principio
-        }
-        else{
-            puntero_clock++;
+        if(pagina_a_reemplazar =! NULL){
+            swapear_pagina_a_disco( pagina_a_reemplazar  , procs_info[pid].pags_en_memoria[var] , pid);
+            //TODO: Quitar pagina_a_reemplazar de procs.info[pid].pags_en_memoria
+            return pagina_a_reemplazar->p2.frame_number;
         }
     }
-    // TODO: Aca cierro el semaforo
-    return pagina_a_reemplazar;
+
+    while (true)
+    {
+        int indice_pag = procs_info[pid].pags_en_memoria[var] / tam_pag;
+        int indice_pag_lvl1 = indice_pag % pags_x_tabl;
+        int indice_pag_lvl2 = indice_pag / pags_x_tabl;
+        int index_pag_lvl2 = page_tables[procs_info[pid].nro_pag_lvl1].entries[indice_pag_lvl1].val;
+        int pag_victima;
+
+        
+        struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
+        int bit_de_uso = entrada->flag_uso;
+        int flag_de_modif = entrada->flag_modif;
+
+        if(alg == ALG_CLOCK_M){
+            pag_victima = bit_de_uso == 0 && flag_de_modif == 1;
+        }
+        else{
+            pag_victima = bit_de_uso == 0;
+        }
+        
+        if (pag_victima)
+        {
+            pagina_a_reemplazar = entrada;
+            break;
+        }
+
+        entrada->flag_uso = 0;
+
+        var = (var + 1) % procs_info[pid].num_pags_en_memoria;
+    }
+
+    swapear_pagina_a_disco( pagina_a_reemplazar  , procs_info[pid].pags_en_memoria[var] , pid); 
+    //TODO: Quitar pagina_a_reemplazar de procs.info[pid].pags_en_memoria
+    return pagina_a_reemplazar->p2.frame_number;
 }
-
-*/
-/*
-
-struct page_table_entry* reemplazar_pagina_clock_m( int pid ){ 
-    struct page_table_entry* pagina_a_reemplazar = NULL;
-    // TODO: Aca capaz un semaforo mutex
-    while(pagina_a_reemplazar == NULL){
-        struct pagina_a_reemplazar* aux_page = list_get( , puntero_clock);  //TODO: en lista get tendria q poner una lista de pags por proceso
-        if(aux_page->flag_uso == 0 && aux_page->modif == 0){
-            pagina_a_reemplazar = aux_page;
-        }
-        else{
-            aux_page -> flag_uso = 0;
-        }
-        int pags_x_proc = cant_pags_x_proc(pid);
-        if(puntero_clock+1 == pags_x_proc ){
-            puntero_clock = 0; // Reinicio el puntero para que arranque del principio
-        }
-        else{
-            puntero_clock++;
-        }
-    }
-    // TODO: Aca cierro el semaforo
-    return pagina_a_reemplazar;
-}
-
-
-void reemplazar_pagina_por (struct page_table_entry* nueva_pagina){
-    // Aca capaz un semaforo
-    struct page_table_entry* pagina_a_reemplazar = NULL;
-    assert_and_log(alg == ALG_CLOCK_M || alg == ALG_CLOCK, "alg reemplazo pags es clock o clock-M");
-    if(alg == ALG_CLOCK_M){
-        pagina_a_reemplazar = reemplazar_pagina_clock(pid);
-    }
-    else if(alg == ALG_CLOCK){
-        pagina_a_reemplazar = reemplazar_pagina_clock_m(pid);
-    }
-    int numero_de_frame = pagina_a_reemplazar -> p2 -> frame_number
-    // Aca vendria a ser el SWAPEO de paginas
-}
-
-*/
 
 int main(int argc, char **argv)
 {
