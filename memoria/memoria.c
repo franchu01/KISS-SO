@@ -36,6 +36,7 @@ typedef struct page_table_entry
     u8 flag_uso;
     // != 0 si se escribio
     u8 flag_modif;
+    // Capaz cada pagina podria tener el PID de su proceso
     union {
         struct page1_table_entry p1;
         struct page2_table_entry p2;
@@ -115,22 +116,32 @@ u32 get_unused_pagetable()
     return old_count;
 }
 
-/* 
+/*
 
-    ESTAS 2 FUNCIONES ESTAN COMENTADAS PORQUE ROMPEN
-    
-struct page_table_entry* reemplazar_pagina_clock( Capaz recibo por parametro un proceso? ){ 
+int cant_pags_x_proc(int nro_de_proc){
+    int k=0;
+    struct proceso = procs_info[nro_de_proc];
+    while(proceso.pags_en_memoria[k] != (-1) ){
+        k++;
+    }
+    return k;
+}
+
+void lista_de_marcos_x_pagina
+
+struct page_table_entry* reemplazar_pagina_clock(int pid){ 
     struct page_table_entry* pagina_a_reemplazar = NULL;
     // TODO: Aca capaz un semaforo mutex
     while(pagina_a_reemplazar == NULL){
-        struct pagina_a_reemplazar* aux_page = list_get( TODO: Aca vendria a meter una lsita de frames (de cada proceso) , puntero_clock);
+        struct pagina_a_reemplazar* aux_page = list_get(  , puntero_clock); //TODO: en lista get tendria q poner una lista de pags por proceso
         if(aux_page->flag_uso == 0){
             pagina_a_reemplazar = aux_page;
         }
         else{
             aux_page -> flag_uso = 0;
         }
-        if(puntero_clock+1 == Cantidad maxima de paginas en memoria (Siempre de un mismo proceso porque es scope local) ){
+        int pags_x_proc = cant_pags_x_proc(pid)
+        if(puntero_clock+1 ==  pags_x_proc){
             puntero_clock = 0; // Reinicio el puntero para que arranque del principio
         }
         else{
@@ -140,23 +151,23 @@ struct page_table_entry* reemplazar_pagina_clock( Capaz recibo por parametro un 
     // TODO: Aca cierro el semaforo
     return pagina_a_reemplazar;
 }
+
 */
 /*
-struct page_table_entry* reemplazar_pagina_clock_m( Capaz recibo por parametro un proceso? ){ 
+
+struct page_table_entry* reemplazar_pagina_clock_m( int pid ){ 
     struct page_table_entry* pagina_a_reemplazar = NULL;
     // TODO: Aca capaz un semaforo mutex
     while(pagina_a_reemplazar == NULL){
-        struct pagina_a_reemplazar* aux_page = list_get( TODO: Aca vendria a meter una lsita de frames (de cada proceso) , puntero_clock);
+        struct pagina_a_reemplazar* aux_page = list_get( , puntero_clock);  //TODO: en lista get tendria q poner una lista de pags por proceso
         if(aux_page->flag_uso == 0 && aux_page->modif == 0){
-            pagina_a_reemplazar = aux_page;
-        }
-        else if(aux_page->flag_uso == 0){
             pagina_a_reemplazar = aux_page;
         }
         else{
             aux_page -> flag_uso = 0;
         }
-        if(puntero_clock+1 == /*Cantidad maxima de paginas en memoria (Siempre de un mismo proceso porque es scope local) ){
+        int pags_x_proc = cant_pags_x_proc(pid);
+        if(puntero_clock+1 == pags_x_proc ){
             puntero_clock = 0; // Reinicio el puntero para que arranque del principio
         }
         else{
@@ -165,6 +176,24 @@ struct page_table_entry* reemplazar_pagina_clock_m( Capaz recibo por parametro u
     }
     // TODO: Aca cierro el semaforo
     return pagina_a_reemplazar;
+}
+
+
+void reemplazar_pagina_por (struct page_table_entry* nueva_pagina){
+    // Aca capaz un semaforo
+    struct page_table_entry* pagina_a_reemplazar = NULL;
+    if(strcmp(alg,"CLOCK") == 0){
+        pagina_a_reemplazar = reemplazar_pagina_clock(pid);
+    }
+    else if(strcmp(alg,"CLOCK-M") == 0){
+        pagina_a_reemplazar = reemplazar_pagina_clock_m(pid);
+    }
+    else{
+        log_error(logger, "Recibido algoritmo desconicido (%d)", alg);
+            log_destroy(logger);
+    }
+    int numero_de_frame = pagina_a_reemplazar -> p2 -> frame_number
+    // Aca vendria a ser el SWAPEO de paginas
 }
 
 */
