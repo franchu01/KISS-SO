@@ -110,7 +110,7 @@ u32 get_unused_pagetable()
 void add_pag_en_memoria_a_proc(u32 logical_addr, u32 pid)
 {
     assert_and_log(procs_info[pid].num_pags_en_memoria < MAX_PAGS_X_PROC,
-                   "No se puede quitar una pagina en memoria de un proc si no tiene ninguna");
+                   "Se supero el nro max de pags x proc que soportamos. Es un bug o hay que incrementar el tamanio del array");
 
     // Si habia 1, num=1 y nuevo indice =1 (Empiezan en 0)
     int nuevo_idx = procs_info[pid].num_pags_en_memoria;
