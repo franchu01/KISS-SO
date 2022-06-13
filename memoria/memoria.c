@@ -69,24 +69,16 @@ typedef struct proc_info
     int proc_swap_file_fd;
     // 1 if suspended; 0 otherwise
     u32 is_suspended;
-    // TODO: FIFO pagetable intrusive list?
-    u32 pags_en_memoria[MAX_PAGS_x_PROC]; // vector lleva en cuenta las paginas en memoria
+    // Cantidad de elementos en pags_en_memoria
+    u32 num_pags_en_memoria;
+    // indice del array pags_en_memoria donde quedo la ultima ejecucion
+    // del algoritmo de reemplazo
+    u32 idx_last_clock_ptr;
+    // Array con nros de pagina ordenados como FIFO para alg clock
+    u32 pags_en_memoria[MAX_PAGS_x_PROC];
 } proc_info;
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
-
-/* Comento la funcion porque rompe
-
-void limpiar_pags_en_memoria(int nro_de_proc){
-    struct procs_info *p = malloc(sizeof(procs_info));
-    *p = procs_info;
-    for(int i=0;i < MAX_PAGS_x_PROC;i++){
-        p[nro_de_proc]->pags_en_memoria[i]=(-1); // -1 Representa que no hay paginas
-    }
-    free(p);
-}
-
-*/
 
 u32 get_unused_pagetable()
 {
@@ -243,12 +235,24 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    path_dir_fd = open(path_swap, 0); // Inicializar Swap?
+    path_dir_fd = open(path_swap, 0);
     if (path_dir_fd == -1)
     {
-        log_error(logger, "Error abriendo directorio de swap \"%s\" strerror: %s", path_swap, strerror(errno));
-        log_destroy(logger);
-        return -1;
+        errno = 0;
+        int created = mkdir(path_swap, 0777);
+        if (created != 0)
+        {
+            log_error(logger, "Error creando directorio de swap \"%s\" strerror: %s", path_swap, strerror(errno));
+            log_destroy(logger);
+            return -1;
+        }
+        path_dir_fd = open(path_swap, 0);
+        if (path_dir_fd == -1)
+        {
+            log_error(logger, "Error abriendo directorio de swap \"%s\" strerror: %s", path_swap, strerror(errno));
+            log_destroy(logger);
+            return -1;
+        }
     }
 
     log_info(logger, "Inicio proceso MEMORIA mem_size:%d page_size:%d retardo_swap:%d "
@@ -347,7 +351,9 @@ void *connection_handler_thread(void *_sock)
             proc_info->nro_pag_lvl1 = nro_pagina_1er_nivel;
             proc_info->is_suspended = 0;
             proc_info->proc_swap_file_fd = swap_file_fd;
-            limpiar_pags_en_memoria(pid); // nuevo proceso no tiene pags en memoria
+            proc_info->num_pags_en_memoria = 0;
+            proc_info->idx_last_clock_ptr = 0;
+            memset(proc_info->pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_x_PROC);
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = nro_pagina_1er_nivel;
@@ -377,7 +383,6 @@ void *connection_handler_thread(void *_sock)
                             u32 marco = entry_lvl2->val;
                             log_info(logger, "Escribiendo por SUSPEND en swap nro de pagina lvl2 %d entrada %d marco %d pid %d",
                                      num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)), (int)marco, pid);
-                            limpiar_pags_en_memoria(pid); // proceso suspendido no tiene pags en memoria
                             assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                             int offset =
                                 pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
@@ -391,6 +396,9 @@ void *connection_handler_thread(void *_sock)
                     nro_pag += pags_x_tabl;
                 }
             }
+            procs_info[pid].num_pags_en_memoria = 0;
+            procs_info[pid].idx_last_clock_ptr = 0;
+            memset(procs_info[pid].pags_en_memoria, 0, sizeof(u32) * MAX_PAGS_x_PROC);
             pthread_mutex_unlock(&m);
             break;
         }
