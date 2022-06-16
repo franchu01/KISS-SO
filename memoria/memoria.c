@@ -556,6 +556,9 @@ void *connection_handler_thread(void *_sock)
         {
             usleep(retardo_memoria * 1000);
 
+            static int last_frame = 0; // mock provisorio para frame libre
+            // TODO: array global que indique si un marco esta asignado o no para todos los procesos
+
             u32 pagetable_idxptr = read_u32(network_buf.buf);
             u32 page_offset = read_u32(network_buf.buf + 4);
             u32 logical_addr = read_u32(network_buf.buf + 8);
@@ -583,9 +586,22 @@ void *connection_handler_thread(void *_sock)
                 else if (t->state == PT_STATE_LVL2)
                 { // Pag 2do nivel, asignar marco
                     // TODO: Asignar marco, invalidar de ser necesario
-                    e->val = 0;
-                    e->flag_presencia = 1;
-                    add_pag_en_memoria_a_proc(logical_addr, pid);
+                    if (procs_info[pid].num_pags_en_memoria < marcos_x_proc){ // Hay algun frame libre?
+                    
+                        e->val = last_frame;
+                        last_frame += tam_pag;
+                        e->flag_presencia = 1;
+                        add_pag_en_memoria_a_proc(logical_addr, pid);
+
+
+                    }
+                    else {
+                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid);
+                        e->val = marco_nuevo_libre;
+                        e->flag_presencia = 1;
+                        add_pag_en_memoria_a_proc(logical_addr,pid);
+
+                  }
                 }
                 else
                 {
