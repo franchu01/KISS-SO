@@ -58,7 +58,7 @@ typedef struct page_table
 
 page_table *page_tables = NULL;
 u32 page_tables_elem_count = 0;
-u32 *memoria_ram = NULL;
+u8 *memoria_ram = NULL;
 int path_dir_fd;
 u32 cant_marcos = 0;
 int *estado_marcos = NULL;
@@ -150,12 +150,14 @@ void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 di
                    "No se puede swaper a disco una pagina que no este presente");
     int swap_file_fd = procs_info[pid].proc_swap_file_fd;
     u32 marco = pagina_a_reemplazar->p2.frame_number;
+    log_info(logger, "Escribiendo pag:%d(addr:%d) en swap marco_nro:%d(addr:%d)",
+             direc_logica / tam_pag, direc_logica, marco / tam_pag, marco);
     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, direc_logica);
     pagina_a_reemplazar->flag_presencia = 0;
     estado_marcos[marco / tam_pag] = MARCO_LIBRE;
 }
 
-u32 reemplazar_pagina_clock(int pid, u32 *out_invalidated_page_log_addr)
+u32 reemplazar_pagina_clock(int pid)
 {
     struct page_table_entry *pagina_a_reemplazar = NULL;
     int idx_current_iteration = procs_info[pid].idx_last_clock_ptr;
@@ -199,7 +201,6 @@ u32 reemplazar_pagina_clock(int pid, u32 *out_invalidated_page_log_addr)
         {
 
             swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
-            *out_invalidated_page_log_addr = procs_info[pid].pags_en_memoria[idx_current_iteration];
 
             procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
             remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
@@ -247,7 +248,6 @@ u32 reemplazar_pagina_clock(int pid, u32 *out_invalidated_page_log_addr)
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
     swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
-    *out_invalidated_page_log_addr = procs_info[pid].pags_en_memoria[idx_current_iteration];
 
     procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
@@ -455,8 +455,8 @@ void *connection_handler_thread(void *_sock)
                         if (entry_lvl2->flag_presencia != 0)
                         {
                             u32 marco = entry_lvl2->val;
-                            log_info(logger, "Escribiendo por SUSPEND en swap nro de pagina lvl2 %d entrada %d marco %d pid %d",
-                                     num_pag2, (int)(((int)end2 - (int)entry_lvl2) / sizeof(*end2)), (int)marco, pid);
+                            log_info(logger, "Escribiendo por SUSPEND en swap nro_pag:%d(addr %d) marco:%d(addr %d) pid %d",
+                                     nro_pag, nro_pag * tam_pag, (int)marco / tam_pag, (int)marco, pid);
                             assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                             int offset =
                                 pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
@@ -526,7 +526,7 @@ void *connection_handler_thread(void *_sock)
             log_info(logger, "Recibido READWRITE addr %d is_write %d val %d", addr, is_write, val);
             assert_and_log(addr < tam_mem, "La direccion de lectura/escritura debe ser menor al tamanio de la memoria");
 
-            u32 *addr_ptr = ((u8 *)memoria_ram) + addr;
+            u32 *addr_ptr = (u32 *)(memoria_ram + addr);
 
             pthread_mutex_lock(&m);
             struct page_table_entry *entry_lvl1 = page_tables[page_lvl1_idxptr].entries;
@@ -591,7 +591,7 @@ void *connection_handler_thread(void *_sock)
             u32 offset_present = e->flag_presencia != 0;
             log_info(logger, "presencia %d state %d", e->flag_presencia, t->state);
             u32 invalidation_count = 0;
-            u32 invalidated_pages_logical_addrs[1];
+            u32 invalidated_frames[1];
             if (!offset_present)
             {
                 // PAGE FAULT
@@ -627,11 +627,18 @@ void *connection_handler_thread(void *_sock)
                     else
                     {
                         invalidation_count = 1;
-                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid, &invalidated_pages_logical_addrs[0]);
+                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid);
+                        invalidated_frames[0] = marco_nuevo_libre;
+
                         e->val = marco_nuevo_libre;
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
                         estado_marcos[marco_nuevo_libre / tam_pag] = MARCO_EN_USO;
+
+                        int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+                        log_info(logger, "Leyendo pag:%d(addr:%d) de swap marco_nro:%d(addr:%d)",
+                                 logical_addr / tam_pag, logical_addr, marco_nuevo_libre / tam_pag, marco_nuevo_libre);
+                        pread(swap_file_fd, memoria_ram + marco_nuevo_libre, tam_pag, logical_addr);
                     }
                 }
                 else
@@ -647,7 +654,7 @@ void *connection_handler_thread(void *_sock)
             if (invalidation_count > 0)
             {
                 assert(invalidation_count == 1);
-                *(u32 *)(network_buf.buf + 8) = invalidated_pages_logical_addrs[0];
+                *(u32 *)(network_buf.buf + 8) = invalidated_frames[0];
             }
             send_buffer(sock, network_buf.buf, sizeof(u32) * (2 + invalidation_count));
             break;
