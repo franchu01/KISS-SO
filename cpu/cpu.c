@@ -372,6 +372,8 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, u32 pid, int mem_sock, t_buflen 
         {
             if (tlb_entry->marco == *invalidations)
             {
+                log_info(logger, "Invalidada tlb_entry idx %d page_lvl1_idx:%d page_lvl2_idx:%d",
+                         ((int)tlb_entry - (int)tlb) / sizeof(entrada_tlb), tlb_entry->page_digits / entradas_x_pagina, tlb_entry->page_digits % entradas_x_pagina);
                 tlb_entry->page_digits = PAGE_DIGITS_UNUSED;
             }
         }

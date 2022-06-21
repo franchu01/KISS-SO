@@ -155,7 +155,7 @@ void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 di
     estado_marcos[marco / tam_pag] = MARCO_LIBRE;
 }
 
-u32 reemplazar_pagina_clock(int pid)
+u32 reemplazar_pagina_clock(int pid, u32 *out_invalidated_page_log_addr)
 {
     struct page_table_entry *pagina_a_reemplazar = NULL;
     int idx_current_iteration = procs_info[pid].idx_last_clock_ptr;
@@ -197,10 +197,12 @@ u32 reemplazar_pagina_clock(int pid)
         }
         if (pagina_a_reemplazar != NULL)
         {
-            procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
-            remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
 
             swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
+            *out_invalidated_page_log_addr = procs_info[pid].pags_en_memoria[idx_current_iteration];
+
+            procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
+            remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
             return pagina_a_reemplazar->p2.frame_number;
         }
     }
@@ -244,10 +246,11 @@ u32 reemplazar_pagina_clock(int pid)
 
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
+    swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
+    *out_invalidated_page_log_addr = procs_info[pid].pags_en_memoria[idx_current_iteration];
+
     procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
-
-    swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
     return pagina_a_reemplazar->p2.frame_number;
 }
 
@@ -587,6 +590,8 @@ void *connection_handler_thread(void *_sock)
             struct page_table_entry *e = &(t->entries[page_offset]);
             u32 offset_present = e->flag_presencia != 0;
             log_info(logger, "presencia %d state %d", e->flag_presencia, t->state);
+            u32 invalidation_count = 0;
+            u32 invalidated_pages_logical_addrs[1];
             if (!offset_present)
             {
                 // PAGE FAULT
@@ -621,7 +626,8 @@ void *connection_handler_thread(void *_sock)
                     }
                     else
                     {
-                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid);
+                        invalidation_count = 1;
+                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid, &invalidated_pages_logical_addrs[0]);
                         e->val = marco_nuevo_libre;
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
@@ -637,10 +643,13 @@ void *connection_handler_thread(void *_sock)
             pthread_mutex_unlock(&m);
 
             *(u32 *)(network_buf.buf) = page_num_or_frame_num;
-            // TODO: devolver las paginas invalidadas de cuando se asigno el marco
-            u32 invalidation_count = 0;
             *(u32 *)(network_buf.buf + 4) = invalidation_count;
-            send_buffer(sock, network_buf.buf, sizeof(u32) * 2);
+            if (invalidation_count > 0)
+            {
+                assert(invalidation_count == 1);
+                *(u32 *)(network_buf.buf + 8) = invalidated_pages_logical_addrs[0];
+            }
+            send_buffer(sock, network_buf.buf, sizeof(u32) * (2 + invalidation_count));
             break;
         }
 
