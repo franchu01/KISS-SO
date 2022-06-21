@@ -61,12 +61,12 @@ u32 page_tables_elem_count = 0;
 u32 *memoria_ram = NULL;
 int path_dir_fd;
 u32 cant_marcos = 0;
-int* estado_marcos = NULL;
-enum estado_marco{
+int *estado_marcos = NULL;
+enum estado_marco
+{
     MARCO_LIBRE = 0,
     MARCO_EN_USO,
 };
-
 
 #define MAX_PAGS_X_PROC (256)
 typedef struct proc_info
@@ -176,15 +176,10 @@ u32 reemplazar_pagina_clock(int pid)
             int bit_de_uso = entrada->flag_uso;
             int flag_de_modificado = entrada->flag_modif;
 
-            log_info(logger, "Iteracion reemplazar_pagina_clock indice 1: %d, indice 2 %d, iteracion %d ",
-             indice_pag_lvl1, indice_pag_lvl2, idx_current_iteration);
-
             assert_and_log(page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].flag_presencia != 0,
                            "Una tabla de paginas de nivel 1 en proc.pags_en_memoria siempre debe estar presente");
             assert_and_log(entrada->flag_presencia != 0,
                            "Una tabla de paginas de nivel 2 en proc.pags_en_memoria siempre debe estar presente");
-
-            
 
             if (bit_de_uso == 0 && flag_de_modificado == 0)
             {
@@ -332,8 +327,9 @@ int main(int argc, char **argv)
     int sock_listen = open_listener_socket(puerto);
 
     cant_marcos = tam_mem / tam_pag;
-    estado_marcos = malloc(cant_marcos * sizeof(int) );
-    for(int i=0;i<cant_marcos;i++){
+    estado_marcos = malloc(cant_marcos * sizeof(int));
+    for (int i = 0; i < cant_marcos; i++)
+    {
         estado_marcos[i] = MARCO_LIBRE;
     }
     memoria_ram = malloc(tam_mem);
@@ -577,9 +573,6 @@ void *connection_handler_thread(void *_sock)
         {
             usleep(retardo_memoria * 1000);
 
-            
-            
-
             u32 pagetable_idxptr = read_u32(network_buf.buf);
             u32 page_offset = read_u32(network_buf.buf + 4);
             u32 logical_addr = read_u32(network_buf.buf + 8);
@@ -601,39 +594,39 @@ void *connection_handler_thread(void *_sock)
                 { // Pag 1er nivel, asignar pagina de 2do nivel
                     e->val = get_unused_pagetable();
                     e->flag_presencia = 1;
-                    
+
                     // No es necesario agregar a proc.pags_en_memoria ya que es entrada de una tabla de 1er nivel
                     // Osea una pagina de 2do nivel, que nunca swapeamos
                 }
                 else if (t->state == PT_STATE_LVL2)
                 { // Pag 2do nivel, asignar marco
-                    
-                    if (procs_info[pid].num_pags_en_memoria < marcos_x_proc){ // Hay algun frame libre?
-                        int i=0;
-                        for(;i<cant_marcos;i++){
-                            if(estado_marcos[i] == MARCO_LIBRE )
+
+                    if (procs_info[pid].num_pags_en_memoria < marcos_x_proc)
+                    { // Hay algun frame libre?
+                        int i = 0;
+                        for (; i < cant_marcos; i++)
+                        {
+                            if (estado_marcos[i] == MARCO_LIBRE)
                             {
                                 break;
                             }
-                        
                         }
 
-                        assert_and_log(i<cant_marcos,"Fallo, se intento asignar un marco cuando estaban todos en uso");
-                        
-                        e->val = i*tam_pag;
+                        assert_and_log(i < cant_marcos, "Fallo, se intento asignar un marco cuando estaban todos en uso");
+
+                        e->val = i * tam_pag;
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
-                        estado_marcos[ i ] = MARCO_EN_USO;
-
+                        estado_marcos[i] = MARCO_EN_USO;
                     }
-                    else {
+                    else
+                    {
                         u32 marco_nuevo_libre = reemplazar_pagina_clock(pid);
                         e->val = marco_nuevo_libre;
                         e->flag_presencia = 1;
-                        add_pag_en_memoria_a_proc(logical_addr,pid);
-                        estado_marcos[ marco_nuevo_libre / tam_pag ] = MARCO_EN_USO;
-
-                  }
+                        add_pag_en_memoria_a_proc(logical_addr, pid);
+                        estado_marcos[marco_nuevo_libre / tam_pag] = MARCO_EN_USO;
+                    }
                 }
                 else
                 {
