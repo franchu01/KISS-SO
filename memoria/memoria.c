@@ -137,8 +137,8 @@ void remove_pag_en_memoria_de_proc(int idx, u32 pid)
         // a la derecha: 4-1-1 = 2 (C y D)
         // Entonces copiamos C, D encima de B, C y queda [A, C, D, D]
         // Y finalmente reducimos num_pags_en_memoria a 3 y queda [A, C, D]
-        void *dest = procs_info[pid].pags_en_memoria + idx;
-        void *src = dest + 1;
+        u32 *dest = procs_info[pid].pags_en_memoria + idx;
+        u32 *src = dest + 1;
         memmove(dest, src, cant_pags_a_la_derecha * sizeof(u32));
     }
     procs_info[pid].num_pags_en_memoria--;
