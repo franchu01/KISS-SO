@@ -88,6 +88,33 @@ typedef struct proc_info
 #define MAX_PROCS (1024 * 10)
 proc_info procs_info[MAX_PROCS] = {0};
 
+void logear_estado_pags(int idx_ptr)
+{
+
+    struct page_table_entry *entry = page_tables[idx_ptr].entries;
+    int nro_pag = 0;
+    for (struct page_table_entry *end = entry + pags_x_tabl; end != entry; entry++)
+    {
+        if (entry->flag_presencia != 0)
+        {
+            u32 num_pag2 = entry->val;
+            struct page_table_entry *entry_lvl2 = page_tables[num_pag2].entries;
+            for (struct page_table_entry *end = entry_lvl2 + pags_x_tabl; end != entry_lvl2; entry_lvl2++)
+            {
+                if (entry_lvl2->flag_presencia != 0)
+                {
+                    log_info(logger, "P: %d B: %d M: %d", nro_pag, entry_lvl2->flag_uso,entry_lvl2->flag_modif);
+                }
+                nro_pag += 1;
+            }
+        }
+        else
+        {
+            nro_pag += pags_x_tabl;
+        }
+    }
+}
+
 u32 get_unused_pagetable()
 {
     for (page_table *it = page_tables, *end = page_tables + page_tables_elem_count; it != end; it++)
@@ -161,7 +188,8 @@ u32 reemplazar_pagina_clock(int pid)
 {
     struct page_table_entry *pagina_a_reemplazar = NULL;
     int idx_current_iteration = procs_info[pid].idx_last_clock_ptr;
-
+    logear_estado_pags(procs_info[pid].pag_lvl1_idxptr);
+    u8 es_primera_iteracion = 1;
     if (alg == ALG_CLOCK_M)
     {
 
@@ -172,8 +200,7 @@ u32 reemplazar_pagina_clock(int pid)
             u32 indice_pag_lvl2 = indice_pag % pags_x_tabl;
 
             u32 index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
-            //TODO: NO FUNCIONAAA
-
+            
             struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
             int bit_de_uso = entrada->flag_uso;
             int flag_de_modificado = entrada->flag_modif;
@@ -227,7 +254,15 @@ u32 reemplazar_pagina_clock(int pid)
 
         if (alg == ALG_CLOCK_M)
         {
-            pag_victima = bit_de_uso == 0 && flag_de_modif == 1;
+            if(es_primera_iteracion)
+            {
+                pag_victima = bit_de_uso == 0 && flag_de_modif == 1;
+            }
+            else
+            {
+                pag_victima = bit_de_uso == 0 && flag_de_modif == 0;
+            }
+
         }
         else
         {
@@ -243,6 +278,11 @@ u32 reemplazar_pagina_clock(int pid)
         entrada->flag_uso = 0;
 
         idx_current_iteration = (idx_current_iteration + 1) % procs_info[pid].num_pags_en_memoria;
+
+        if (idx_current_iteration == procs_info[pid].idx_last_clock_ptr)
+            {
+                es_primera_iteracion = 0;
+            }
     }
 
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
@@ -251,6 +291,7 @@ u32 reemplazar_pagina_clock(int pid)
 
     procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
+    logear_estado_pags(procs_info[pid].pag_lvl1_idxptr);
     return pagina_a_reemplazar->p2.frame_number;
 }
 
@@ -491,7 +532,7 @@ void *connection_handler_thread(void *_sock)
         case MEMORIA_END_PROCESS:
         {
             u32 pid = read_u32(network_buf.buf);
-            u32 nro_pag1 = read_u32(network_buf.buf + 4);
+            u32 idx_ptr = read_u32(network_buf.buf + 4);
             log_info(logger, "Recibido END_PROCESS pid %d", pid);
 
             pthread_mutex_lock(&m);
@@ -500,8 +541,9 @@ void *connection_handler_thread(void *_sock)
             assert_and_log(close(swap_file_fd) == 0, "close swap file fd");
             assert_and_log(unlinkat(path_dir_fd, stackbuf, 0) == 0, "remove swap file");
 
-            page_tables[nro_pag1].state = PT_STATE_UNUSED;
-            struct page_table_entry *entry = page_tables[nro_pag1].entries;
+            page_tables[idx_ptr].state = PT_STATE_UNUSED;
+            struct page_table_entry *entry = page_tables[idx_ptr].entries;
+            logear_estado_pags(idx_ptr);
             for (struct page_table_entry *end = entry + pags_x_tabl; end != entry; entry++)
             {
                 if (entry->flag_presencia != 0)
@@ -509,6 +551,7 @@ void *connection_handler_thread(void *_sock)
                     u32 num_pag2 = entry->val;
                     page_tables[num_pag2].state = PT_STATE_UNUSED;
                 }
+                
             }
             pthread_mutex_unlock(&m);
             break;
