@@ -103,7 +103,7 @@ void logear_estado_pags(int idx_ptr)
             {
                 if (entry_lvl2->flag_presencia != 0)
                 {
-                    log_info(logger, "P: %d B: %d M: %d", nro_pag, entry_lvl2->flag_uso,entry_lvl2->flag_modif);
+                    log_info(logger, "P: %d B: %d M: %d", nro_pag, entry_lvl2->flag_uso, entry_lvl2->flag_modif);
                 }
                 nro_pag += 1;
             }
@@ -189,51 +189,8 @@ u32 reemplazar_pagina_clock(int pid)
     struct page_table_entry *pagina_a_reemplazar = NULL;
     int idx_current_iteration = procs_info[pid].idx_last_clock_ptr;
     logear_estado_pags(procs_info[pid].pag_lvl1_idxptr);
-    u8 es_primera_iteracion = 1;
-    if (alg == ALG_CLOCK_M)
-    {
-
-        while (true)
-        {
-            u32 indice_pag = procs_info[pid].pags_en_memoria[idx_current_iteration] / tam_pag;
-            u32 indice_pag_lvl1 = indice_pag / pags_x_tabl;
-            u32 indice_pag_lvl2 = indice_pag % pags_x_tabl;
-
-            u32 index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
-            
-            struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
-            int bit_de_uso = entrada->flag_uso;
-            int flag_de_modificado = entrada->flag_modif;
-
-            assert_and_log(page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].flag_presencia != 0,
-                           "Una tabla de paginas de nivel 1 en proc.pags_en_memoria siempre debe estar presente");
-            assert_and_log(entrada->flag_presencia != 0,
-                           "Una tabla de paginas de nivel 2 en proc.pags_en_memoria siempre debe estar presente");
-
-            if (bit_de_uso == 0 && flag_de_modificado == 0)
-            {
-                pagina_a_reemplazar = entrada;
-                break;
-            }
-
-            entrada->flag_uso = 0;
-
-            idx_current_iteration = (idx_current_iteration + 1) % procs_info[pid].num_pags_en_memoria;
-            if (idx_current_iteration == procs_info[pid].idx_last_clock_ptr)
-            {
-                break;
-            }
-        }
-        if (pagina_a_reemplazar != NULL)
-        {
-
-            swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
-
-            procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
-            remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
-            return pagina_a_reemplazar->p2.frame_number;
-        }
-    }
+    // Esta variable indica cuantas vueltas ya se dieron al array pags_en_memoria
+    u8 iteracion = 0;
 
     while (true)
     {
@@ -242,6 +199,7 @@ u32 reemplazar_pagina_clock(int pid)
         u32 indice_pag_lvl2 = indice_pag % pags_x_tabl;
         u32 index_pag_lvl2 = page_tables[procs_info[pid].pag_lvl1_idxptr].entries[indice_pag_lvl1].val;
         int pag_victima;
+        int iteracion_clock_m_paso1 = iteracion % 2 == 0;
 
         struct page_table_entry *entrada = &(page_tables[index_pag_lvl2].entries[indice_pag_lvl2]);
         int bit_de_uso = entrada->flag_uso;
@@ -252,17 +210,17 @@ u32 reemplazar_pagina_clock(int pid)
         assert_and_log(entrada->flag_presencia != 0,
                        "Una tabla de paginas en proc.pags_en_memoria siempre debe estar presente");
 
+        //log_info(logger, "idx: %d U %d M %d", idx_current_iteration, bit_de_uso, flag_de_modif);
         if (alg == ALG_CLOCK_M)
         {
-            if(es_primera_iteracion)
-            {
-                pag_victima = bit_de_uso == 0 && flag_de_modif == 1;
-            }
-            else
+            if (iteracion_clock_m_paso1)
             {
                 pag_victima = bit_de_uso == 0 && flag_de_modif == 0;
             }
-
+            else
+            {
+                pag_victima = bit_de_uso == 0 && flag_de_modif == 1;
+            }
         }
         else
         {
@@ -275,22 +233,28 @@ u32 reemplazar_pagina_clock(int pid)
             break;
         }
 
-        entrada->flag_uso = 0;
+        if (alg == ALG_CLOCK || !iteracion_clock_m_paso1)
+        {
+            // CLOCK normal siempre setea, clock_m solo en paso2
+            entrada->flag_uso = 0;
+        }
 
         idx_current_iteration = (idx_current_iteration + 1) % procs_info[pid].num_pags_en_memoria;
 
         if (idx_current_iteration == procs_info[pid].idx_last_clock_ptr)
-            {
-                es_primera_iteracion = 0;
-            }
+        {
+            iteracion += 1;
+        }
+        assert_and_log(iteracion < 4, "CLOCK_M no deberia hacer mas de 4 iteraciones");
     }
 
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
     swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
 
-    procs_info[pid].idx_last_clock_ptr = idx_current_iteration;
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
+    procs_info[pid].idx_last_clock_ptr = idx_current_iteration % procs_info[pid].num_pags_en_memoria;
+    //log_info(logger, "idx_last_clock_ptr: %d", procs_info[pid].idx_last_clock_ptr);
     logear_estado_pags(procs_info[pid].pag_lvl1_idxptr);
     return pagina_a_reemplazar->p2.frame_number;
 }
@@ -551,7 +515,6 @@ void *connection_handler_thread(void *_sock)
                     u32 num_pag2 = entry->val;
                     page_tables[num_pag2].state = PT_STATE_UNUSED;
                 }
-                
             }
             pthread_mutex_unlock(&m);
             break;
@@ -566,7 +529,7 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf + 12);
             u32 page_lvl1_idxptr = procs_info[pid].pag_lvl1_idxptr;
             u32 frame_addr = (addr / tam_pag) * tam_pag;
-            log_info(logger, "Recibido READWRITE addr %d is_write %d val %d", addr, is_write, val);
+            log_info(logger, "Recibido READWRITE phys_addr %d is_write %d val %d", addr, is_write, val);
             assert_and_log(addr < tam_mem, "La direccion de lectura/escritura debe ser menor al tamanio de la memoria");
 
             u32 *addr_ptr = (u32 *)(memoria_ram + addr);
@@ -638,6 +601,8 @@ void *connection_handler_thread(void *_sock)
             if (!offset_present)
             {
                 // PAGE FAULT
+                e->flag_modif = 0;
+                e->flag_uso = 0;
                 if (t->state == PT_STATE_LVL1)
                 { // Pag 1er nivel, asignar pagina de 2do nivel
                     e->val = get_unused_pagetable();
