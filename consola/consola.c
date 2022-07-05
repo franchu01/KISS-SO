@@ -141,6 +141,11 @@ inst_t *parse_codigo(char *b, int len, int *out_count)
             inst.code = INST_IO;
             inst.args[0] = atoi(line_start + 4);
         }
+        else if (starts_with(line_start, "IO "))
+        {
+            inst.code = INST_IO;
+            inst.args[0] = atoi(line_start + 3);
+        }
         else if (starts_with(line_start, "COPY "))
         {
             inst.code = INST_COPY;
