@@ -399,7 +399,7 @@ void *connection_handler_thread(void *_sock)
         {
         case HANDSHAKE_CPU_MEMORIA:
         {
-            *(u32 *)(network_buf.buf) = marcos_x_proc;
+            *(u32 *)(network_buf.buf) = pags_x_tabl;
             *(u32 *)(network_buf.buf + 4) = tam_pag;
             log_info_colored(ANSI_COLOR_YELLOW, "Respondiendo HANDSHAKE_CPU_MEMORIA tam_pag %d marcos_x_proc %d", tam_pag, marcos_x_proc);
             send_buffer(sock, network_buf.buf, sizeof(u32) * 2);
