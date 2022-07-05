@@ -276,7 +276,7 @@ int main(int argc, char **argv)
 
         static u32 last_pid = 1;
         u32 new_pid = last_pid++;
-        log_info(logger, "Recibido nuevo proceso pid: %d inst_count: %d", new_pid, inst_count);
+        log_info_colored(ANSI_COLOR_BLUE, "Recibido nuevo proceso pid: %d inst_count: %d", new_pid, inst_count);
         log_insts(insts, inst_count);
 
         pcb_t *pcb = malloc(sizeof(pcb_t));
@@ -291,9 +291,9 @@ int main(int argc, char **argv)
         pcb->consola_sock = new_conn_sock;
 
         pthread_mutex_lock(&scheduling_mutex);
-        log_info(logger, "Avisando a MEMORIA...");
+        log_info_colored(ANSI_COLOR_BLUE, "Avisando a MEMORIA...");
         pcb->pag_1er_niv = send_mem_new_process(mem_sock, &network_buf, new_pid, tamanio);
-        log_info(logger, "Nro de tabla de 1er nivel dado por MEMORIA: %d", pcb->pag_1er_niv);
+        log_info_colored(ANSI_COLOR_BLUE, "Nro de tabla de 1er nivel dado por MEMORIA: %d", pcb->pag_1er_niv);
         set_proc_state(pcb, PROC_STATE_NEW);
         long_term_scheduling();
         pthread_mutex_unlock(&scheduling_mutex);
@@ -311,8 +311,8 @@ int main(int argc, char **argv)
 }
 void set_proc_state(pcb_t *p, enum estado_proceso s)
 {
-    log_info(logger, "Pasando proceso pid %d del estado %s a %s",
-             p->pid, estado_proces_a_str(p->state), estado_proces_a_str(s));
+    log_info_colored(ANSI_COLOR_MAGENTA, "Pasando proceso pid %d del estado %s a %s",
+                     p->pid, estado_proces_a_str(p->state), estado_proces_a_str(s));
     assert_and_log(p->pid > 0,
                    "Se llamo a set_proc_state con pcb invalido (pid=0), probablemente fue una lista");
 
@@ -439,7 +439,7 @@ void *dispatcher_thread(void *_p)
             }
             else
             {
-                log_info(logger, "Enviado aviso de fin de proceso a consola pid %d", p->pid);
+                log_info_colored(ANSI_COLOR_BLUE, "Enviado aviso de fin de proceso a consola pid %d", p->pid);
             }
 
             send_mem_end_process(mem_sock, &network_buf, p->pid, p->pag_1er_niv);
@@ -457,7 +457,7 @@ void *dispatcher_thread(void *_p)
                 double ultima_estimacion = p->estimacion_rafaga;
                 double ultima_rafaga_real = res.rafaga;
                 p->estimacion_rafaga = (u32)floor(ultima_estimacion * (1.0 - alfa) + alfa * ultima_rafaga_real);
-                log_info(logger, "actualizando pid %d estimacion_rafaga: %d ultima_estimacion %f ultima_rafaga_real %f alfa %f", p->pid, p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
+                log_info_colored(ANSI_COLOR_GREEN, "actualizando pid %d estimacion_rafaga: %d ultima_estimacion %f ultima_rafaga_real %f alfa %f", p->pid, p->estimacion_rafaga, ultima_estimacion, ultima_rafaga_real, alfa);
                 p->rafaga_actual = 0;
 
                 p->block_ms = res.bloqueo_io;
@@ -505,7 +505,7 @@ void *io_device_thread(void *_unused)
             u32 remaining_wait_ms_after_suspend = wait_ms - tiempo_hasta_suspendido;
             if (tiempo_hasta_suspendido > 0)
             {
-                log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando (Va a suspenderse en %d)", pcb->pid, wait_ms, tiempo_hasta_suspendido);
+                log_info_colored(ANSI_COLOR_CYAN, "Ejecutando IO de pid %d por %d ms, bloqueando (Va a suspenderse en %d)", pcb->pid, wait_ms, tiempo_hasta_suspendido);
                 pthread_mutex_unlock(&scheduling_mutex);
 
                 usleep(1000 * tiempo_hasta_suspendido);
@@ -513,8 +513,8 @@ void *io_device_thread(void *_unused)
                 pthread_mutex_lock(&scheduling_mutex);
             }
 
-            log_info(logger, "Pasando pid %d a SUSPENDED_BLOCKED luego de %d ms de bloqueo, quedan %d ms, bloqueando",
-                     pcb->pid, tiempo_hasta_suspendido, remaining_wait_ms_after_suspend);
+            log_info_colored(ANSI_COLOR_CYAN, "Pasando pid %d a SUSPENDED_BLOCKED luego de %d ms de bloqueo, quedan %d ms, bloqueando",
+                             pcb->pid, tiempo_hasta_suspendido, remaining_wait_ms_after_suspend);
             set_proc_state(pcb, PROC_STATE_SUSPENDED_BLOCKED);
             mid_term_scheduling();
             pthread_mutex_unlock(&scheduling_mutex);
@@ -522,20 +522,20 @@ void *io_device_thread(void *_unused)
             usleep(1000 * remaining_wait_ms_after_suspend);
 
             pthread_mutex_lock(&scheduling_mutex);
-            log_info(logger, "Terminada IO pid %d", pcb->pid);
+            log_info_colored(ANSI_COLOR_CYAN, "Terminada IO pid %d", pcb->pid);
             set_proc_state(pcb, PROC_STATE_SUSPENDED_RDY);
             mid_term_scheduling();
             pthread_mutex_unlock(&scheduling_mutex);
         }
         else
         {
-            log_info(logger, "Ejecutando IO de pid %d por %d ms, bloqueando", pcb->pid, wait_ms);
+            log_info_colored(ANSI_COLOR_CYAN, "Ejecutando IO de pid %d por %d ms, bloqueando", pcb->pid, wait_ms);
             pthread_mutex_unlock(&scheduling_mutex);
 
             usleep(1000 * wait_ms);
 
             pthread_mutex_lock(&scheduling_mutex);
-            log_info(logger, "Terminada IO pid %d", pcb->pid);
+            log_info_colored(ANSI_COLOR_CYAN, "Terminada IO pid %d", pcb->pid);
             set_proc_state(pcb, PROC_STATE_RDY);
             mid_term_scheduling();
             pthread_mutex_unlock(&scheduling_mutex);
@@ -556,7 +556,7 @@ void short_term_scheduling(void)
             pcb_t *first_in = first_in_susp_rdy ? first_in_susp_rdy : first_in_rdy;
             if (first_in)
             {
-                log_info(logger, "No hay nadie en EXEC, planificando pid %d para ejecucion (FIFO)", first_in->pid);
+                log_info_colored(ANSI_COLOR_GREEN, "No hay nadie en EXEC, planificando pid %d para ejecucion (FIFO)", first_in->pid);
                 set_proc_state(first_in, PROC_STATE_EXEC);
             }
         }
@@ -574,9 +574,9 @@ void short_term_scheduling(void)
         u32 estimacion_del_pcb_exec = executing_pcb ? executing_pcb->estimacion_rafaga : 0;
         if (best_rdy_pcb != NULL && (executing_pcb == NULL || estimacion_del_pcb_exec > best_rdy_pcb->estimacion_rafaga))
         {
-            log_info(logger, "estimacion %d de pid %d mejor que estimacion de EXEC %d (0=no habia nada en exec), "
-                             "planificando para ejecucion (SRT)",
-                     best_rdy_pcb->estimacion_rafaga, best_rdy_pcb->pid, estimacion_del_pcb_exec);
+            log_info_colored(ANSI_COLOR_GREEN, "estimacion %d de pid %d mejor que estimacion de EXEC %d (0=no habia nada en exec), "
+                                               "planificando para ejecucion (SRT)",
+                             best_rdy_pcb->estimacion_rafaga, best_rdy_pcb->pid, estimacion_del_pcb_exec);
             set_proc_state(best_rdy_pcb, PROC_STATE_EXEC);
         }
     }

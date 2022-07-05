@@ -265,4 +265,20 @@ struct dispatch_res
 struct dispatch_res send_dispatch(int sockfd, t_buflen *buf, u32 pid, u32 pc, u32 tab_pags_niv_1, u32 num_insts, inst_t *insts);
 void send_interrupt(int sockfd, t_buflen *buf, u32 pid);
 
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_GRAY "\x1b[38;5;183m"
+#define ANSI_COLOR_RESET "\x1b[0m"
+void log_info_colored(t_log *logger, char *color, const char *message, ...);
+#define log_info_colored(color, msg, ...)     \
+    do                                        \
+    {                                         \
+        printf(color);                        \
+        log_info(logger, msg, ##__VA_ARGS__); \
+        printf(ANSI_COLOR_RESET);             \
+    } while (0)
 #endif

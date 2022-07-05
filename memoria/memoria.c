@@ -103,7 +103,7 @@ void logear_estado_pags(int idx_ptr)
             {
                 if (entry_lvl2->flag_presencia != 0)
                 {
-                    log_info(logger, "P: %d B: %d M: %d", nro_pag, entry_lvl2->flag_uso, entry_lvl2->flag_modif);
+                    log_info_colored(ANSI_COLOR_CYAN, "P: %d B: %d M: %d", nro_pag, entry_lvl2->flag_uso, entry_lvl2->flag_modif);
                 }
                 nro_pag += 1;
             }
@@ -124,7 +124,7 @@ u32 get_unused_pagetable()
             it->state = PT_STATE_LVL2;
             memset(it->entries, 0, pags_x_tabl * sizeof(struct page_table_entry));
             u32 page_num = ((int)it - (int)page_tables) / sizeof(struct page_table);
-            log_info(logger, "usando nro de pagina vacia %d", page_num);
+            log_info_colored(ANSI_COLOR_CYAN, "usando nro de pagina vacia %d", page_num);
             return page_num;
         }
     }
@@ -177,8 +177,8 @@ void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 di
                    "No se puede swaper a disco una pagina que no este presente");
     int swap_file_fd = procs_info[pid].proc_swap_file_fd;
     u32 marco = pagina_a_reemplazar->p2.frame_number;
-    log_info(logger, "Escribiendo pag:%d(addr:%d) en swap marco_nro:%d(addr:%d)",
-             direc_logica / tam_pag, direc_logica, marco / tam_pag, marco);
+    log_info_colored(ANSI_COLOR_CYAN, "Escribiendo pag:%d(addr:%d) en swap marco_nro:%d(addr:%d)",
+                     direc_logica / tam_pag, direc_logica, marco / tam_pag, marco);
     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, direc_logica);
     pagina_a_reemplazar->flag_presencia = 0;
     estado_marcos[marco / tam_pag] = MARCO_LIBRE;
@@ -250,6 +250,10 @@ u32 reemplazar_pagina_clock(int pid)
 
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
+    log_info(logger, "Swapeada pg idx en array %d a dico\n"
+                     "========================================================================\n"
+                     "========================================================================",
+             idx_current_iteration);
     swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
 
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
@@ -389,7 +393,7 @@ void *connection_handler_thread(void *_sock)
     {
         log_info(logger, "Esperando nuevo mensaje en socket %d", sock);
         t_msgheader h = recv_msg(sock, &network_buf);
-        log_info(logger, "Mensaje tipo %s recibido en socket %d", codigo_msg_to_string(h.codigo), sock);
+        log_info_colored(ANSI_COLOR_YELLOW, "Mensaje tipo %s recibido en socket %d", codigo_msg_to_string(h.codigo), sock);
 
         switch (h.codigo)
         {
@@ -397,7 +401,7 @@ void *connection_handler_thread(void *_sock)
         {
             *(u32 *)(network_buf.buf) = marcos_x_proc;
             *(u32 *)(network_buf.buf + 4) = tam_pag;
-            log_info(logger, "Respondiendo HANDSHAKE_CPU_MEMORIA tam_pag %d marcos_x_proc %d", tam_pag, marcos_x_proc);
+            log_info_colored(ANSI_COLOR_YELLOW, "Respondiendo HANDSHAKE_CPU_MEMORIA tam_pag %d marcos_x_proc %d", tam_pag, marcos_x_proc);
             send_buffer(sock, network_buf.buf, sizeof(u32) * 2);
             break;
         }
@@ -409,9 +413,9 @@ void *connection_handler_thread(void *_sock)
             pthread_mutex_lock(&m);
             u32 pagina_1er_nivel_idxptr = get_unused_pagetable();
             page_tables[pagina_1er_nivel_idxptr].state = PT_STATE_LVL1;
-            log_info(logger, "Recibido NEW_PROCESS pid %d tam_proc %d respondiendo pagina_1er_nivel_idxptr:%d "
-                             "y creando archivo de swap",
-                     pid, tam_proc, pagina_1er_nivel_idxptr);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido NEW_PROCESS pid %d tam_proc %d respondiendo pagina_1er_nivel_idxptr:%d "
+                                                "y creando archivo de swap",
+                             pid, tam_proc, pagina_1er_nivel_idxptr);
 
             // Create file
             assert_and_log(pid < MAX_PROCS, "pid menor a MAX_PROCS");
@@ -443,7 +447,7 @@ void *connection_handler_thread(void *_sock)
         {
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
-            log_info(logger, "Recibido PROCESS_SUSPENDED pid %d", pid);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido PROCESS_SUSPENDED pid %d", pid);
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 1;
             int swap_file_fd = procs_info[pid].proc_swap_file_fd;
@@ -460,11 +464,18 @@ void *connection_handler_thread(void *_sock)
                         if (entry_lvl2->flag_presencia != 0)
                         {
                             u32 marco = entry_lvl2->val;
-                            log_info(logger, "Escribiendo por SUSPEND en swap nro_pag:%d(addr %d) marco:%d(addr %d) pid %d",
-                                     nro_pag, nro_pag * tam_pag, (int)marco / tam_pag, (int)marco, pid);
-                            assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
-                            int offset =
-                                pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
+                            if (entry_lvl2->flag_modif != 0)
+                            {
+                                log_info_colored(ANSI_COLOR_CYAN, "Escribiendo por SUSPEND en swap nro_pag:%d(addr %d) marco:%d(addr %d) pid %d",
+                                                 nro_pag, nro_pag * tam_pag, (int)marco / tam_pag, (int)marco, pid);
+                                assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
+                                int offset =
+                                    pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
+                            }
+                            log_info(logger, "Swapeada nro_pag %d a dico\n"
+                                             "========================================================================\n"
+                                             "========================================================================",
+                                     nro_pag);
                             entry_lvl2->flag_presencia = 0;
                             estado_marcos[marco / tam_pag] = MARCO_LIBRE;
                         }
@@ -486,7 +497,7 @@ void *connection_handler_thread(void *_sock)
         {
             u32 pid = read_u32(network_buf.buf);
             u32 nro_pag1 = read_u32(network_buf.buf + 4);
-            log_info(logger, "Recibido PROCESS_UNSUSPENDED pid %d", pid);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido PROCESS_UNSUSPENDED pid %d", pid);
 
             pthread_mutex_lock(&m);
             procs_info[pid].is_suspended = 0;
@@ -497,7 +508,7 @@ void *connection_handler_thread(void *_sock)
         {
             u32 pid = read_u32(network_buf.buf);
             u32 idx_ptr = read_u32(network_buf.buf + 4);
-            log_info(logger, "Recibido END_PROCESS pid %d", pid);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido END_PROCESS pid %d", pid);
 
             pthread_mutex_lock(&m);
             int swap_file_fd = procs_info[pid].proc_swap_file_fd;
@@ -529,7 +540,7 @@ void *connection_handler_thread(void *_sock)
             u32 pid = read_u32(network_buf.buf + 12);
             u32 page_lvl1_idxptr = procs_info[pid].pag_lvl1_idxptr;
             u32 frame_addr = (addr / tam_pag) * tam_pag;
-            log_info(logger, "Recibido READWRITE phys_addr %d is_write %d val %d", addr, is_write, val);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido READWRITE phys_addr %d is_write %d val %d", addr, is_write, val);
             assert_and_log(addr < tam_mem, "La direccion de lectura/escritura debe ser menor al tamanio de la memoria");
 
             u32 *addr_ptr = (u32 *)(memoria_ram + addr);
@@ -586,16 +597,37 @@ void *connection_handler_thread(void *_sock)
             u32 page_offset = read_u32(network_buf.buf + 4);
             u32 logical_addr = read_u32(network_buf.buf + 8);
             u32 pid = read_u32(network_buf.buf + 12);
-            log_info(logger, "Recibido PAGEREAD pagetable_idxptr %d offset %d", pagetable_idxptr, page_offset);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido PAGEREAD pagetable_idxptr:%d offset:%d log_addr:%d pid:%d",
+                             pagetable_idxptr, page_offset, logical_addr, pid);
 
             pthread_mutex_lock(&m);
             assert_and_log(page_tables[pagetable_idxptr].state != PT_STATE_UNUSED,
                            "La tabla de paginas de la que se lee debe estar en uso");
 
             struct page_table *t = &page_tables[pagetable_idxptr];
+
+            // Para asserts
+            u32 indice_pag_from_logical_addr = logical_addr / tam_pag;
+            u32 indice_pag_lvl1_from_logical_addr = indice_pag_from_logical_addr / pags_x_tabl;
+            u32 indice_pag_lvl2_from_logical_addr = indice_pag_from_logical_addr % pags_x_tabl;
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido PAGEREAD indice_pag_from_logical_addr:%d indice_pag_lvl1_from_logical_addr:%d indice_pag_lvl2_from_logical_addr:%d",
+                             indice_pag_from_logical_addr, indice_pag_lvl1_from_logical_addr, indice_pag_lvl2_from_logical_addr);
+            if (t->state == PT_STATE_LVL1)
+            {
+                assert_and_log(pagetable_idxptr == procs_info[pid].pag_lvl1_idxptr,
+                               "pid.tabla_lvl1 == tabla_lvl1 recibida PAGEREAD");
+                assert_and_log(page_offset == indice_pag_lvl1_from_logical_addr,
+                               "page_offset == indice_pag_lvl1_from_logical_addr");
+            }
+            else if (t->state == PT_STATE_LVL2)
+            {
+                assert_and_log(page_offset == indice_pag_lvl2_from_logical_addr,
+                               "page_offset == indice_pag_lvl2_from_logical_addr");
+            }
+
             struct page_table_entry *e = &(t->entries[page_offset]);
             u32 offset_present = e->flag_presencia != 0;
-            log_info(logger, "presencia %d state %d", e->flag_presencia, t->state);
+            log_info_colored(ANSI_COLOR_CYAN, "antes: presencia %d state %d", e->flag_presencia, t->state);
             u32 invalidation_count = 0;
             u32 invalidated_frames[1];
             if (!offset_present)
@@ -614,6 +646,8 @@ void *connection_handler_thread(void *_sock)
                 else if (t->state == PT_STATE_LVL2)
                 { // Pag 2do nivel, asignar marco
 
+                    assert_and_log(page_offset == indice_pag_lvl2_from_logical_addr,
+                                   "page_offset == indice_pag_lvl2_from_logical_addr");
                     if (procs_info[pid].num_pags_en_memoria < marcos_x_proc)
                     { // Hay algun frame libre?
                         int i = 0;
@@ -631,6 +665,7 @@ void *connection_handler_thread(void *_sock)
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
                         estado_marcos[i] = MARCO_EN_USO;
+                        logear_estado_pags(procs_info[pid].pag_lvl1_idxptr);
                     }
                     else
                     {
@@ -654,6 +689,7 @@ void *connection_handler_thread(void *_sock)
                     assert_and_log(0, "una pagina solo puede ser de lvl1 o lvl2");
                 }
             }
+            log_info_colored(ANSI_COLOR_CYAN, "dsps: presencia %d state %d", e->flag_presencia, t->state);
             u32 page_num_or_frame_num = e->val;
             pthread_mutex_unlock(&m);
 
@@ -669,8 +705,8 @@ void *connection_handler_thread(void *_sock)
         }
 
         default:
-            log_error(logger, "Recibido mensaje desconocido (%d) %s cant_bytes %d",
-                      h.codigo, codigo_msg_to_string(h.codigo), h.cant_bytes_contenido);
+            log_info_colored(ANSI_COLOR_YELLOW, "Recibido mensaje desconocido (%d) %s cant_bytes %d",
+                             h.codigo, codigo_msg_to_string(h.codigo), h.cant_bytes_contenido);
             log_destroy(logger);
             exit(-1);
             break;

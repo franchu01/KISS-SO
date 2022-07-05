@@ -140,14 +140,14 @@ int main(int argc, char **argv)
         inst_t *insts = malloc(sizeof(inst_t) * num_insts);
         memcpy(insts, in_insts, sizeof(inst_t) * num_insts);
 
-        log_info(logger, "Recibido %s pid:%d pc:%d tab:%d num_insts:%d x socket dispatch fd:%d",
-                 codigo_msg_to_string(h.codigo), pid, pc, tabla_pags_1er_niv, num_insts, sock_int);
+        log_info_colored(ANSI_COLOR_BLUE, "Recibido %s pid:%d pc:%d tab:%d num_insts:%d x socket dispatch fd:%d",
+                         codigo_msg_to_string(h.codigo), pid, pc, tabla_pags_1er_niv, num_insts, sock_int);
 
         assert_and_log(num_insts != 0, "Programa vacio? inst_count=0");
         assert_and_log(pc < num_insts, "Programa terminado? pc >= num_insts");
 
         int64_t inicio_ejecucion = timestamp();
-        log_info(logger, "Inicio ciclo DISPATCH timestamp %" PRId64 "", inicio_ejecucion);
+        log_info_colored(ANSI_COLOR_BLUE, "Inicio ciclo DISPATCH timestamp %" PRId64 "", inicio_ejecucion);
         // Flush TLB
         for (entrada_tlb *end = tlb + entradas_tlb, *tlb_entry = tlb; tlb_entry != end; tlb_entry++)
         {
@@ -177,14 +177,14 @@ int main(int argc, char **argv)
             {
             case INST_NO_OP:
             {
-                log_info(logger, "Ejecutando NOOP con sleep de %d ms", retardo_noop);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando NOOP con sleep de %d ms", retardo_noop);
                 usleep(retardo_noop * 1000);
                 break;
             }
             case INST_EXIT:
             {
                 int64_t elapsed = (timestamp() - inicio_ejecucion) / 1000;
-                log_info(logger, "Ejecutando EXIT con nuevo pc %d elapsed %" PRId64 " ms", pc, elapsed);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando EXIT con nuevo pc %d elapsed %" PRId64 " ms", pc, elapsed);
 
                 retornar_dispatch(sock_disp, &network_buf, pid, pc, (u32)elapsed, 0);
                 goto after_while;
@@ -194,7 +194,7 @@ int main(int argc, char **argv)
             {
                 u32 elapsed = (u32)((timestamp() - inicio_ejecucion) / 1000);
                 u32 ms_bloqueo = inst.args[0];
-                log_info(logger, "Ejecutando IO con nuevo pc %d elapsed %d ms bloqueo %d", pc, elapsed, ms_bloqueo);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando IO con nuevo pc %d elapsed %d ms bloqueo %d", pc, elapsed, ms_bloqueo);
 
                 retornar_dispatch(sock_disp, &network_buf, pid, pc, elapsed, ms_bloqueo);
                 goto after_while;
@@ -203,17 +203,17 @@ int main(int argc, char **argv)
             case INST_READ:
             {
                 u32 read_addr = inst.args[0];
-                log_info(logger, "Ejecutando READ %d", read_addr);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando READ %d", read_addr);
 
                 u32 read_val = perform_readwrite(&network_buf, tabla_pags_1er_niv, read_addr, 0, 0, pid);
-                log_info(logger, "Valor leido: %d", read_val);
+                log_info_colored(ANSI_COLOR_MAGENTA, "Valor leido: %d", read_val);
                 break;
             }
             case INST_WRITE:
             {
                 u32 write_addr = inst.args[0];
                 u32 write_val = inst.args[1];
-                log_info(logger, "Ejecutando WRITE *%d = %d", write_addr, write_val);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando WRITE *%d = %d", write_addr, write_val);
 
                 u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, write_addr, 1, write_val, pid);
                 assert_and_log(write_val == value_written, "Valor escrito == valor retornado por memoria");
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
             {
                 u32 copy_dest = inst.args[0];
                 u32 copy_src = inst.args[1];
-                log_info(logger, "Ejecutando COPY *%d = *%d", copy_dest, copy_src);
+                log_info_colored(ANSI_COLOR_GREEN, "Ejecutando COPY *%d = *%d", copy_dest, copy_src);
                 u32 value_written = perform_readwrite(&network_buf, tabla_pags_1er_niv, copy_dest, 1, fetched_val, pid);
                 assert_and_log(fetched_val == value_written, "Valor escrito == valor retornado por memoria");
                 break;
@@ -244,14 +244,14 @@ int main(int argc, char **argv)
                 if (interrupted_pid == pid)
                 {
                     u32 elapsed = (u32)((timestamp() - inicio_ejecucion) / 1000);
-                    log_info(logger, "Retornando debido a interrupt con nuevo pc %d elapsed %d ms", pc, elapsed);
+                    log_info_colored(ANSI_COLOR_YELLOW, "Retornando debido a interrupt con nuevo pc %d elapsed %d ms", pc, elapsed);
                     retornar_dispatch(sock_disp, &network_buf, pid, pc, elapsed, 0);
                     break;
                 }
             }
         }
     after_while:
-        log_info(logger, "Fin ciclo DISPATCH");
+        log_info_colored(ANSI_COLOR_CYAN, "Fin ciclo DISPATCH");
 
         free(insts);
     }
@@ -278,7 +278,7 @@ void *interrupt_accept_thread(void *_sock_int)
         assert_and_log(h.codigo == INTERRUPT_PROCESS, "socket interrupt de cpu solo recibe INTERRUPT_PROCESS");
 
         u32 pid = *(u32 *)(network_buf.buf);
-        log_info(logger, "Recibido %s pid %d en socket interrupt %d", codigo_msg_to_string(h.codigo), pid, sock_int);
+        log_info_colored(ANSI_COLOR_YELLOW, "Recibido %s pid %d en socket interrupt %d", codigo_msg_to_string(h.codigo), pid, sock_int);
 
         pthread_mutex_lock(&interrupt_pid_mutex);
         interrupt = true;
@@ -312,8 +312,8 @@ entrada_tlb *get_tlb_entry_to_replace()
             }
         }
         ret->page_digits = PAGE_DIGITS_UNUSED;
-        log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
-                 (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
+        log_info_colored(ANSI_COLOR_GRAY, "Reutilizando/Reemplazando entrada tlb nro %d",
+                         (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
         return ret;
     }
     case TLB_ALG_LRU:
@@ -328,8 +328,8 @@ entrada_tlb *get_tlb_entry_to_replace()
             }
         }
         ret->page_digits = PAGE_DIGITS_UNUSED;
-        log_info(logger, "Reutilizando/Reemplazando entrada tlb nro %d",
-                 (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
+        log_info_colored(ANSI_COLOR_GRAY, "Reutilizando/Reemplazando entrada tlb nro %d",
+                         (int)((((int)ret) - ((int)tlb)) / sizeof(entrada_tlb)));
         return ret;
     }
     }
@@ -348,15 +348,15 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, u32 pid, int mem_sock, t_buflen 
     {
         if (tlb_entry->page_digits == page_digits)
         {
-            log_info(logger, "TLB HIT logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d marco %d",
-                     log_addr, page_lvl1, tlb_entry->page_digits, page_lvl1_idx, page_lvl2_idx, tlb_entry->marco);
+            log_info_colored(ANSI_COLOR_GRAY, "TLB HIT logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d marco %d",
+                             log_addr, page_lvl1, tlb_entry->page_digits, page_lvl1_idx, page_lvl2_idx, tlb_entry->marco);
             tlb_entry->use_timestamp = timestamp();
             *out_tlb = tlb_entry;
             return tlb_entry->marco + offset_into_frame;
         }
     }
-    log_info(logger, "TLB MISS logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d",
-             log_addr, page_lvl1, page_digits, page_lvl1_idx, page_lvl2_idx);
+    log_info_colored(ANSI_COLOR_GRAY, "TLB MISS logical addr %#04X pagelvl1 %d page_digits %d page_lvl1_idx %d page_lvl2_idx %d",
+                     log_addr, page_lvl1, page_digits, page_lvl1_idx, page_lvl2_idx);
 
     u32 invalidation_count = 0;
     u32 *invalidations = NULL;
@@ -372,16 +372,16 @@ u32 translate_addr(u32 log_addr, u32 page_lvl1, u32 pid, int mem_sock, t_buflen 
         {
             if (tlb_entry->marco == *invalidations)
             {
-                log_info(logger, "Invalidada tlb_entry idx %d page_lvl1_idx:%d page_lvl2_idx:%d",
-                         ((int)tlb_entry - (int)tlb) / sizeof(entrada_tlb), tlb_entry->page_digits / entradas_x_pagina, tlb_entry->page_digits % entradas_x_pagina);
+                log_info_colored(ANSI_COLOR_GRAY, "Invalidada tlb_entry idx %d page_lvl1_idx:%d page_lvl2_idx:%d",
+                                 ((int)tlb_entry - (int)tlb) / sizeof(entrada_tlb), tlb_entry->page_digits / entradas_x_pagina, tlb_entry->page_digits % entradas_x_pagina);
                 tlb_entry->page_digits = PAGE_DIGITS_UNUSED;
             }
         }
     }
     entrada_tlb *entry_to_replace = get_tlb_entry_to_replace();
 
-    log_info(logger, "Escribiendo entrada de TLB nro %d addr_marco %d",
-             (int)((((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb)), phys_addr_marco);
+    log_info_colored(ANSI_COLOR_GRAY, "Escribiendo entrada de TLB nro %d addr_marco %d",
+                     (int)((((int)entry_to_replace) - ((int)tlb)) / sizeof(entrada_tlb)), phys_addr_marco);
     entry_to_replace->marco = phys_addr_marco;
     entry_to_replace->page_digits = page_digits;
     entry_to_replace->use_timestamp = timestamp();
