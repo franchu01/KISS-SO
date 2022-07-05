@@ -1,0 +1,11 @@
+#!/bin/bash
+cd "$(dirname "$0")"
+MODULO=$1
+
+pushd ./../..
+make clean && make $MODULO
+popd
+
+if test -f "./../../$MODULO/$MODULO"; then
+    valgrind --tool=memcheck --leak-check=yes --show-possibly-lost=no --show-reachable=no --num-callers=20 ./../../$MODULO/$MODULO "${@:2}"
+fi
