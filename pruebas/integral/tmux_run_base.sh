@@ -32,8 +32,8 @@ tmux split-window -h -t tp 'sleep 3.0 && exec ./vexec kernel'
 tmux split-window -h -t tp 'sleep 4.5 && exec ./vexec consola ./INTEGRAL_1 2048'
 tmux split-window -h -t tp 'sleep 6.0 && exec ./vexec consola ./INTEGRAL_2 2048'
 tmux split-window -h -t tp 'sleep 7.5 && exec ./vexec consola ./INTEGRAL_3 2048'
-tmux split-window -h -t tp 'sleep 9.0 && exec ./vexec consola ./INTEGRAL_4 2048'
-tmux split-window -h -t tp 'sleep 10.5 && exec ./vexec consola ./INTEGRAL_5 2048'
+tmux split-window -v -t tp 'sleep 9.0 && exec ./vexec consola ./INTEGRAL_4 2048'
+tmux split-window -v -t tp 'sleep 10.5 && exec ./vexec consola ./INTEGRAL_5 2048'
 
 
 # Entrar a la sesion
