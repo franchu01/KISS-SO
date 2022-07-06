@@ -64,6 +64,11 @@ typedef struct pcb
     inst_t *insts;
     u32 pag_1er_niv;
 
+    // Metadata para logs
+    u32 timestamp_recibido;
+    u32 timestamp_ingreso_sistema;
+    u32 contador_suspensiones;
+
     // Usado solo para mandar este dato al hilo de IO
     u32 block_ms;
     // timestamp de cuando se paso a bloqueado
@@ -121,6 +126,10 @@ void init_pcb_list(pcb_t *l)
     l->prev = l;
     l->state = PROC_STATE_INVALID_IS_LIST;
     l->pid = 0;
+
+    l->contador_suspensiones = 0;
+    l->timestamp_recibido = 0;
+    l->timestamp_ingreso_sistema = 0;
 }
 // Assert que `l` es una lista y no un pcb
 void assert_es_lista(pcb_t *l)
@@ -290,6 +299,10 @@ int main(int argc, char **argv)
         pcb->estimacion_rafaga = estimacion_inicial;
         pcb->consola_sock = new_conn_sock;
 
+        pcb->timestamp_recibido = timestamp();
+        pcb->contador_suspensiones = 0;
+        pcb->timestamp_ingreso_sistema = 0;
+
         pthread_mutex_lock(&scheduling_mutex);
         log_info_colored(ANSI_COLOR_BLUE, "Avisando a MEMORIA...");
         pcb->pag_1er_niv = send_mem_new_process(mem_sock, &network_buf, new_pid, tamanio);
@@ -336,6 +349,7 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
                 send_mem_process_unsuspended(mem_sock, &buf, p->pid, p->pag_1er_niv);
             else
             { // NEW
+                p->timestamp_ingreso_sistema = timestamp();
                 //  Se hace cuando se crea, no es necesario
                 // send_mem_new_process(mem_sock, &buf, p->pid);
             }
@@ -355,6 +369,8 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
         assert_and_log(p->state == PROC_STATE_BLOCKED, "A SUSP_BLOQ solo se llega desde BLOQ");
         multiprogramacion--;
         lista = &lista_susp_bloq;
+
+        p->contador_suspensiones++;
 
         char stackbuf[1024];
         t_buflen buf = {stackbuf, 1024};
@@ -383,6 +399,13 @@ void set_proc_state(pcb_t *p, enum estado_proceso s)
         break;
     case PROC_STATE_EXIT:
         assert_and_log(p->state == PROC_STATE_EXEC, "A EXIT solo se llega desde EXEC");
+
+        u32 timestamp_actual = timestamp();
+        u32 dur_rdy = (timestamp_actual - p->timestamp_ingreso_sistema) / 1000;
+        u32 dur_rec = (timestamp_actual - p->timestamp_recibido) / 1000;
+        log_info_colored(ANSI_COLOR_MAGENTA, "Cantidad suspensiones:%d tiempo_ejec_desde_rdy:%dms tiempo_ejec_desde_recibido:%dms",
+                         p->contador_suspensiones, dur_rdy, dur_rec);
+
         free(p->insts);
         free(p);
         multiprogramacion--;
