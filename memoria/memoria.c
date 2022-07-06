@@ -180,6 +180,7 @@ void swapear_pagina_a_disco(struct page_table_entry *pagina_a_reemplazar, u32 di
     log_info_colored(ANSI_COLOR_CYAN, "Escribiendo pag:%d(addr:%d) en swap marco_nro:%d(addr:%d)",
                      direc_logica / tam_pag, direc_logica, marco / tam_pag, marco);
     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, direc_logica);
+    usleep(retardo_swap * 1000);
     pagina_a_reemplazar->flag_presencia = 0;
     estado_marcos[marco / tam_pag] = MARCO_LIBRE;
 }
@@ -471,6 +472,7 @@ void *connection_handler_thread(void *_sock)
                                 assert_and_log(marco < tam_mem, "Se intento escribir a disco una direccion de marco mayor al tamanio de la memoria");
                                 int offset =
                                     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
+                                usleep(retardo_swap * 1000);
                             }
                             log_info(logger, "Swapeada nro_pag %d a dico\n"
                                              "========================================================================\n"
@@ -682,6 +684,7 @@ void *connection_handler_thread(void *_sock)
                         log_info(logger, "Leyendo pag:%d(addr:%d) de swap marco_nro:%d(addr:%d)",
                                  logical_addr / tam_pag, logical_addr, marco_nuevo_libre / tam_pag, marco_nuevo_libre);
                         pread(swap_file_fd, memoria_ram + marco_nuevo_libre, tam_pag, logical_addr);
+                        usleep(retardo_swap * 1000);
                     }
                 }
                 else
