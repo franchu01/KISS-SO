@@ -29,8 +29,8 @@ tmux set-option remain-on-exit on
 sleep 1.5
 tmux split-window -h -t tp 'exec ./vexec cpu'
 tmux split-window -h -t tp 'sleep 3.0 && exec ./vexec kernel'
-tmux split-window -h -t tp 'sleep 4.5 && exec ./vexec consola ./MEMORIA_1 2048'
-tmux split-window -h -t tp 'sleep 6.0 && exec ./vexec consola ./MEMORIA_1 2048'
+tmux split-window -h -t tp 'sleep 4.5 && exec ./vexec consola ./TLB_1 2048'
+tmux split-window -h -t tp 'sleep 6.0 && exec ./vexec consola ./TLB_2 2048'
 
 
 # Entrar a la sesion
