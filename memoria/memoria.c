@@ -251,10 +251,10 @@ u32 reemplazar_pagina_clock(int pid)
 
     assert_and_log(pagina_a_reemplazar != NULL, "siempre se debe poder encontrar una pagina a reemplazar");
 
-    log_info(logger, "Swapeada pg idx en array %d a dico\n"
-                     "========================================================================\n"
-                     "========================================================================",
-             idx_current_iteration);
+    //log_info(logger, "Swapeada pg idx en array %d a dico\n"
+    //                 "========================================================================\n"
+    //                 "========================================================================",
+    //         idx_current_iteration);
     swapear_pagina_a_disco(pagina_a_reemplazar, procs_info[pid].pags_en_memoria[idx_current_iteration], pid);
 
     remove_pag_en_memoria_de_proc(idx_current_iteration, pid);
