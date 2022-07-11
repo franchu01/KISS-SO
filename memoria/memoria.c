@@ -474,10 +474,10 @@ void *connection_handler_thread(void *_sock)
                                     pwrite(swap_file_fd, memoria_ram + marco, tam_pag, nro_pag * tam_pag);
                                 usleep(retardo_swap * 1000);
                             }
-                            log_info(logger, "Swapeada nro_pag %d a dico\n"
-                                             "========================================================================\n"
-                                             "========================================================================",
-                                     nro_pag);
+                            //log_info(logger, "Swapeada nro_pag %d a dico\n"
+                            //                 "========================================================================\n"
+                            //                 "========================================================================",
+                            //         nro_pag);
                             entry_lvl2->flag_presencia = 0;
                             estado_marcos[marco / tam_pag] = MARCO_LIBRE;
                         }
@@ -632,6 +632,7 @@ void *connection_handler_thread(void *_sock)
             log_info_colored(ANSI_COLOR_CYAN, "antes: presencia %d state %d", e->flag_presencia, t->state);
             u32 invalidation_count = 0;
             u32 invalidated_frames[1];
+            u32 marco_nuevo_libre;
             if (!offset_present)
             {
                 // PAGE FAULT
@@ -663,7 +664,8 @@ void *connection_handler_thread(void *_sock)
 
                         assert_and_log(i < cant_marcos, "Fallo, se intento asignar un marco cuando estaban todos en uso");
 
-                        e->val = i * tam_pag;
+                        marco_nuevo_libre = i * tam_pag;
+                        e->val = marco_nuevo_libre;
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
                         estado_marcos[i] = MARCO_EN_USO;
@@ -672,20 +674,19 @@ void *connection_handler_thread(void *_sock)
                     else
                     {
                         invalidation_count = 1;
-                        u32 marco_nuevo_libre = reemplazar_pagina_clock(pid);
+                        marco_nuevo_libre = reemplazar_pagina_clock(pid);
                         invalidated_frames[0] = marco_nuevo_libre;
 
                         e->val = marco_nuevo_libre;
                         e->flag_presencia = 1;
                         add_pag_en_memoria_a_proc(logical_addr, pid);
                         estado_marcos[marco_nuevo_libre / tam_pag] = MARCO_EN_USO;
-
-                        int swap_file_fd = procs_info[pid].proc_swap_file_fd;
-                        log_info(logger, "Leyendo pag:%d(addr:%d) de swap marco_nro:%d(addr:%d)",
-                                 logical_addr / tam_pag, logical_addr, marco_nuevo_libre / tam_pag, marco_nuevo_libre);
-                        pread(swap_file_fd, memoria_ram + marco_nuevo_libre, tam_pag, logical_addr);
-                        usleep(retardo_swap * 1000);
                     }
+                    int swap_file_fd = procs_info[pid].proc_swap_file_fd;
+                    log_info(logger, "Leyendo pag:%d(addr:%d) de swap marco_nro:%d(addr:%d)",
+                             logical_addr / tam_pag, logical_addr, marco_nuevo_libre / tam_pag, marco_nuevo_libre);
+                    pread(swap_file_fd, memoria_ram + marco_nuevo_libre, tam_pag, logical_addr);
+                    usleep(retardo_swap * 1000);
                 }
                 else
                 {

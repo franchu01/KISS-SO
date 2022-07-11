@@ -22,5 +22,5 @@ case $1 in
     exit -1
     ;;
 esac
-find . -name '*.config' -exec sed -i -e "s/IP_${proc_name}=127.0.0.1/IP_MEMORIA=$ip/g" {} \;
+find . -name '*.config' -exec sed -i -e "s/IP_${proc_name}=127.0.0.1/IP_${proc_name}=$ip/g" {} \;
 #echo "s/IP_$proc_name=127.0.0.1/IP_MEMORIA=$ip/g";
